@@ -1,0 +1,185 @@
+name: Build 星棱狐 (StarFox)
+
+# 手动触发，避免和上游 release.yml 的 v* tag 抢。
+# 也可以在 Actions 页面填 ko_repo 顺带拉你自己的 .ko。
+
+on:
+  workflow_dispatch:
+    inputs:
+      ko_repo:
+        description: '你自己的 .ko 仓库 (owner/repo)，留空则跳过'
+        required: false
+        default: ''
+      ko_tag:
+        description: '.ko 所在的 Release tag'
+        required: false
+        default: 'lkm-latest'
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  KO_REPO: ${{ github.event.inputs.ko_repo }}
+  KO_TAG: ${{ github.event.inputs.ko_tag || 'lkm-latest' }}
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  ANDROID_NDK: '29.0.14206865'
+
+jobs:
+  build-manager:
+    name: Build manager APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK packages
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platform-tools" || true
+          # 依次尝试编译平台，装到哪个用哪个
+          for api in 37 36; do
+            if sdkmanager "platforms;android-$api" > /dev/null 2>&1; then
+              echo "PLATFORM_API=$api" >> $GITHUB_ENV
+              break
+            fi
+          done
+          if [ -z "$PLATFORM_API" ]; then echo "no platform installed"; exit 1; fi
+          echo "using platform android-$PLATFORM_API"
+          for bt in 37.0.0 36.0.0; do
+            if sdkmanager "build-tools;$bt" > /dev/null 2>&1; then
+              echo "BUILD_TOOLS=$bt" >> $GITHUB_ENV
+              break
+            fi
+          done
+          [ -n "$BUILD_TOOLS" ] || { echo "no build-tools installed"; exit 1; }
+          echo "using build-tools $BUILD_TOOLS"
+          # NDK 依次降级
+          for ndk in 29.0.14206865 28.1.13356709 27.0.12077973; do
+            if sdkmanager "ndk;$ndk" > /dev/null 2>&1; then
+              echo "NDK_VER=$ndk" >> $GITHUB_ENV
+              break
+            fi
+          done
+          [ -n "$NDK_VER" ] || { echo "no ndk installed"; exit 1; }
+          echo "using ndk $NDK_VER"
+
+      - name: Align gradle to installed SDK
+        run: |
+          python3 - <<'PY'
+          import os, re, pathlib
+          api = os.environ['PLATFORM_API']
+          bt  = os.environ['BUILD_TOOLS']
+          ndk = os.environ['NDK_VER']
+
+          toml = pathlib.Path('manager/gradle/libs.versions.toml')
+          t = toml.read_text(encoding='utf-8')
+          t = re.sub(r'(?m)^ndk\s*=\s*"[^"]+"', f'ndk = "{ndk}"', t)
+          toml.write_text(t, encoding='utf-8')
+
+          g = pathlib.Path('manager/build.gradle.kts')
+          s = g.read_text(encoding='utf-8')
+          s = re.sub(r'extra\["androidCompileSdkVersion"\]\s*=\s*\d+', f'extra["androidCompileSdkVersion"] = {api}', s)
+          s = re.sub(r'extra\["androidTargetSdkVersion"\]\s*=\s*\d+', f'extra["androidTargetSdkVersion"] = {api}', s)
+          s = re.sub(r'extra\["androidBuildToolsVersion"\]\s*=\s*"[^"]+"', f'extra["androidBuildToolsVersion"] = "{bt}"', s)
+          g.write_text(s, encoding='utf-8')
+          print('aligned:', api, bt, ndk)
+          PY
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('manager/**/*.gradle*', 'manager/gradle/**') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Make gradlew executable
+        run: chmod +x manager/gradlew
+
+      - name: Build release APK
+        working-directory: manager
+        run: |
+          ./gradlew :app:assembleRelease -PKSU_PACKAGE_NAME=com.iki.xlh --no-daemon --stacktrace
+
+      - name: Collect APK
+        run: |
+          mkdir -p out
+          find manager/app/build/outputs/apk -name '*.apk' -exec cp {} out/ \;
+          ls -la out
+          if [ -z "$(ls -A out)" ]; then echo "no apk produced"; exit 1; fi
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: starfox-manager-apk
+          path: out/*.apk
+          if-no-files-found: error
+
+  fetch-ko:
+    name: Fetch your kernel .ko
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.ko_repo != '' }}
+    steps:
+      - name: Download .ko from your release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p out-ko
+          gh release download "$KO_TAG" --repo "$KO_REPO" --pattern '*.ko' --dir out-ko \
+            || echo "::warning::no .ko found in $KO_REPO@$KO_TAG"
+
+      - name: Fallback - search repo for .ko
+        run: |
+          if [ -z "$(ls -A out-ko 2>/dev/null)" ]; then
+            git clone --depth 1 "https://github.com/${KO_REPO}.git" ko-src || true
+            find ko-src -name '*.ko' -exec cp {} out-ko/ \; 2>/dev/null || true
+          fi
+          ls -la out-ko || true
+
+      - name: Upload .ko artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: starfox-kernel-ko
+          path: out-ko/**/*.ko
+          if-no-files-found: warn
+
+  publish:
+    name: Publish rolling release
+    needs: [build-manager]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Publish to latest-build
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-build
+          name: 星棱狐 最新构建
+          body: |
+            星棱狐 (StarFox) 管理器自动构建
+
+            - 包名 `com.iki.xlh`
+            - 展示名 星棱狐
+            - 自研五路 root 识别
+            - 内核模块候选名 xlh / starfox / kernelsu / sukisu / ksu
+          files: dist/**/*.apk
+          fail_on_unmatched_files: false
