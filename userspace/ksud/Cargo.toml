@@ -16,7 +16,7 @@ rust-embed = { version = "8", features = [
 ] }
 which = "8"
 sha1 = "0.11"
-base16ct = { version = "0.2", features = ["alloc"] }
+base16ct = { version = "1.0", features = ["alloc"] }
 sha256 = "1"
 tempfile = "3"
 chrono = "0.4"
@@ -32,7 +32,7 @@ rustix = { version = "1", features = [
     "all-apis",
 ] }
 android_logger = { version = "0.15", default-features = false }
-zip = { version = "8",  features = [
+zip = { version = "9",  features = [
     "deflate",
     "deflate64",
     "time",
@@ -59,10 +59,10 @@ ksuinit = { path = "../ksuinit" }
 adb_client = { git = "https://github.com/KernelSU2/adb_client" }
 prop-rs-android = { git = "https://github.com/KernelSU2/ksu_props", rev = "ddb6ee7294467f7f25bad2118e9e24eee104144b" }
 serde = { version = "1.0", features = ["derive"] }
-chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
+chacha20poly1305 = { version = "0.11", default-features = false, features = ["alloc"] }
 
 [target.'cfg(all(target_os = "android", target_arch = "aarch64"))'.dependencies]
-mlua = { version = "0.11.6", features = ["lua54", "vendored"] }
+mlua = { version = "0.12.2", features = ["lua54", "vendored"] }
 
 [build-dependencies]
 bindgen = "0.73"
