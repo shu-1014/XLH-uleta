@@ -1,10 +1,11 @@
 plugins {
     alias(libs.plugins.agp.app) apply false
+    alias(libs.plugins.agp.library) apply false
     alias(libs.plugins.kotlin) apply false
     alias(libs.plugins.compose.compiler) apply false
 }
 
-extra["androidMinSdkVersion"] = 31
+extra["androidMinSdkVersion"] = 24
 extra["androidTargetSdkVersion"] = 37
 extra["androidCompileSdkVersion"] = 37
 extra["androidCompileSdkVersionMinor"] = 0
@@ -16,31 +17,30 @@ extra["managerVersionCode"] = getVersionCode()
 extra["managerVersionName"] = getVersionName()
 
 fun getGitCommitCount(): Int {
-    return runCatching {
-        val process = Runtime.getRuntime().exec(arrayOf("git", "rev-list", "--count", "HEAD"))
-        process.inputStream.bufferedReader().use { it.readText().trim().toInt() }
-    }.getOrElse { 0 }
+    // 没有 git 仓库（比如直接解压源码）时不再炸构建，退回本地计数。
+    val process = runCatching {
+        Runtime.getRuntime().exec(arrayOf("git", "rev-list", "--count", "HEAD"))
+    }.getOrNull() ?: return 4001
+    return runCatching { process.inputStream.bufferedReader().use { it.readText().trim().toInt() } }
+        .getOrDefault(4001)
 }
 
 fun getGitDescribe(): String {
-    return runCatching {
-        val process = Runtime.getRuntime().exec(arrayOf("git", "describe", "--tags", "--always"))
-        process.inputStream.bufferedReader().use { it.readText().trim() }
-    }.getOrElse { "unknown" }
+    val process = runCatching {
+        Runtime.getRuntime().exec(arrayOf("git", "describe", "--tags", "--always", "--abbrev=0"))
+    }.getOrNull() ?: return "1.0.0-xinglengfu"
+    return runCatching { process.inputStream.bufferedReader().use { it.readText().trim() } }
+        .getOrDefault("1.0.0-xinglengfu")
+        .ifBlank { "1.0.0-xinglengfu" }
 }
 
-// The version can be pinned instead of derived from git:
-//   ./gradlew assembleRelease -PKSU_VERSION_CODE=30008 -PKSU_VERSION_NAME=v3.4.1-xinglinghu
-// CI clones this repo fresh, so its commit count differs from the one the LKM was
-// built against and the manager would otherwise disagree with the kernel.
 fun getVersionCode(): Int {
-    val override = project.findProperty("KSU_VERSION_CODE")?.toString()
-    if (!override.isNullOrBlank()) return override.toInt()
-    return 30000 + getGitCommitCount()
+    val commitCount = getGitCommitCount()
+    val major = 3
+    val end = 4001
+    return major * 10000 + commitCount - end
 }
 
 fun getVersionName(): String {
-    val override = project.findProperty("KSU_VERSION_NAME")?.toString()
-    if (!override.isNullOrBlank()) return override
     return getGitDescribe()
 }

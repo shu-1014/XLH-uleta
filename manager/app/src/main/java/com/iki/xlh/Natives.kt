@@ -26,10 +26,34 @@ object Natives {
     // 32513: add uapi version
     const val MINIMAL_SUPPORTED_KERNEL = 32513
 
+    // Get full version
+    // The kernel returns null when the GET_FULL_VERSION supercall is unavailable.
+    external fun getFullVersion(): String?
+    const val MINIMAL_SUPPORTED_KERNEL_FULL = "v3.0.0"
+
+    // 12040: Support disable sucompat mode
     const val KERNEL_SU_DOMAIN = "u:r:ksu:s0"
 
     const val ROOT_UID = 0
     const val ROOT_GID = 0
+
+    fun isVersionLessThan(v1Full: String, v2Full: String): Boolean {
+        fun extractVersionParts(version: String): List<Int> {
+            val match = Regex("""v\d+(\.\d+)*""").find(version)
+            val simpleVersion = match?.value ?: version
+            return simpleVersion.trimStart('v').split('.').map { it.toIntOrNull() ?: 0 }
+        }
+
+        val v1Parts = extractVersionParts(v1Full)
+        val v2Parts = extractVersionParts(v2Full)
+        val maxLength = maxOf(v1Parts.size, v2Parts.size)
+        for (i in 0 until maxLength) {
+            val num1 = v1Parts.getOrElse(i) { 0 }
+            val num2 = v2Parts.getOrElse(i) { 0 }
+            if (num1 != num2) return num1 < num2
+        }
+        return false
+    }
 
     init {
         System.loadLibrary("kernelsu")
@@ -93,12 +117,27 @@ object Natives {
     external fun isSelinuxHideEnabled(): Boolean
     external fun setSelinuxHideEnabled(enabled: Boolean): Int
 
+    
+    external fun isAvcSpoofEnabled(): Boolean
+    external fun setAvcSpoofEnabled(enabled: Boolean): Boolean
+
+    /**
+     * Mount hide can be disabled temporarily.
+     *  0: disabled
+     *  1: enabled
+     *  negative : error
+     */
+    external fun isMountHideEnabled(): Boolean
+    external fun setMountHideEnabled(enabled: Boolean): Int
+
     /**
      * Get the user name for the uid.
      */
     external fun getUserName(uid: Int): String?
 
     external fun getSuperuserCount(): Int
+
+    external fun getHookType(): String
 
     private const val NON_ROOT_DEFAULT_PROFILE_KEY = "$"
     private const val NOBODY_UID = 9999
@@ -127,17 +166,16 @@ object Natives {
         external get
 
     /**
-     * Kernel stealth flag: 1 = on, 0 = off, -1 = could not be read.
-     *
-     * The negative result is meaningful and must not be collapsed into 0; see
-     * `com.iki.xlh.ui.stealth.Stealth`.
+     * Root through some other means, no SukiSU kernel. Kernel calls just return defaults here,
+     * so the pages can be opened and browsed.
      */
-    external fun stealthState(): Int
-
-    external fun stealthSet(enabled: Boolean): Boolean
+    fun isPreviewMode(): Boolean = !isManager && rootAvailable()
 
     fun isFullFeatured(): Boolean {
-        return isManager && kernelUAPIVersion == managerUAPIVersion && rootAvailable()
+        val kernelFullVersion = getFullVersion()
+        return (kernelFullVersion != null && isVersionLessThan(kernelFullVersion, MINIMAL_SUPPORTED_KERNEL_FULL)) ||
+                isManager && kernelUAPIVersion == managerUAPIVersion && rootAvailable() ||
+                isPreviewMode()
     }
 
     @Keep

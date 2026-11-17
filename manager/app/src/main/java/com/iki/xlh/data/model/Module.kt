@@ -8,7 +8,7 @@ data class Module(
     val name: String,
     val author: String,
     val version: String,
-    val versionCode: Int,
+    val versionCode: Long,
     val description: String,
     val enabled: Boolean,
     val update: Boolean,
@@ -20,4 +20,8 @@ data class Module(
     val zygisk: Boolean = false,
     val actionIconPath: String?,
     val webUiIconPath: String?,
+    // preinit state for the next boot: "", "ok", "no_space", "error" or "bootloop"
+    val preinit: String = "",
+    val bannerPath: String? = null,
+    val suppressedByBuiltin: Boolean = false,
 )

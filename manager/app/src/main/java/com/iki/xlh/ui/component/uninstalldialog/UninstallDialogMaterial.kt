@@ -1,7 +1,6 @@
 package com.iki.xlh.ui.component.uninstalldialog
 
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -11,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.iki.xlh.R
 import com.iki.xlh.ui.component.dialog.rememberConfirmDialog
+import com.iki.xlh.ui.component.material.IconTile
 import com.iki.xlh.ui.component.material.SegmentedColumn
 import com.iki.xlh.ui.component.material.SegmentedListItem
 import com.iki.xlh.ui.navigation3.LocalNavigator
@@ -59,10 +59,7 @@ fun UninstallDialogMaterial(
                                 headlineContent = { Text(stringResource(type.title)) },
                                 supportingContent = { Text(stringResource(type.message)) },
                                 leadingContent = {
-                                    Icon(
-                                        imageVector = type.icon,
-                                        contentDescription = null
-                                    )
+                                    IconTile(type.icon, null)
                                 }
                             )
                         }

@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import com.iki.xlh.Natives
+import com.iki.xlh.data.model.TemplateInfo
 import com.iki.xlh.data.repository.TemplateRepository
 import com.iki.xlh.data.repository.TemplateRepositoryImpl
 import com.iki.xlh.profile.Capabilities
@@ -80,9 +81,9 @@ class TemplateViewModel(
     }
 }
 
-fun getTemplateInfoById(id: String): com.iki.xlh.data.model.TemplateInfo? {
+fun getTemplateInfoById(id: String): TemplateInfo? {
     return runCatching {
-        com.iki.xlh.data.model.TemplateInfo.fromJSON(JSONObject(getAppProfileTemplate(id)))
+        TemplateInfo.fromJSON(JSONObject(getAppProfileTemplate(id)))
     }.onFailure {
         Log.e(TAG, "ignore invalid template: $it", it)
     }.getOrNull()

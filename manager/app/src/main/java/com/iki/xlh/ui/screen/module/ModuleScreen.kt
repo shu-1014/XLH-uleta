@@ -9,7 +9,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -24,6 +23,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import com.iki.xlh.R
+import com.iki.xlh.data.script.ScriptRepository
 import com.iki.xlh.ui.LocalUiMode
 import com.iki.xlh.ui.UiMode
 import com.iki.xlh.ui.component.SearchStatus
@@ -31,6 +31,7 @@ import com.iki.xlh.ui.navigation3.LocalNavigator
 import com.iki.xlh.ui.navigation3.Route
 import com.iki.xlh.ui.screen.flash.FlashIt
 import com.iki.xlh.ui.screen.modulerepo.downloadFailureMessage
+import com.iki.xlh.ui.screen.scriptrun.ScriptRunArg
 import com.iki.xlh.ui.util.download
 import com.iki.xlh.ui.util.module.Shortcut
 import com.iki.xlh.ui.viewmodel.ModuleViewModel
@@ -154,6 +155,27 @@ fun ModulePager(
         onToggleSortEnabledFirst = {
             viewModel.toggleSortEnabledFirst()
         },
+        onToggleSortWebUiFirst = {
+            viewModel.toggleSortWebUiFirst()
+        },
+        onToggleSortZygiskFirst = {
+            viewModel.toggleSortZygiskFirst()
+        },
+        onToggleSortMetamoduleFirst = {
+            viewModel.toggleSortMetamoduleFirst()
+        },
+        onSetSortNameOrder = {
+            viewModel.setSortNameOrder(it)
+        },
+        onToggleSortManual = {
+            viewModel.toggleSortManual()
+        },
+        onMoveModule = { from, to ->
+            viewModel.moveModule(from, to)
+        },
+        onCommitManualOrder = {
+            viewModel.commitManualOrder()
+        },
         onOpenWebUi = { module ->
             webUILauncher.launch(
                 Intent(context, WebUIActivity::class.java)
@@ -172,7 +194,20 @@ fun ModulePager(
             viewModel.undoUninstallModule(module)
         },
         onOpenFlash = { uris ->
-            if (uris.isNotEmpty()) {
+            if (uris.size == 1) {
+                // A one-shot script ZIP is offered to be run instead (or installed anyway).
+                scope.launch {
+                    val script = ScriptRepository.peekOneshot(uris.first())
+                    if (script != null) {
+                        navigator.push(
+                            Route.ScriptRun(ScriptRunArg(uris.first(), offerInstall = true, displayName = script.name))
+                        )
+                    } else {
+                        navigator.push(Route.Flash(FlashIt.FlashModules(uris)))
+                    }
+                    viewModel.markNeedRefresh()
+                }
+            } else if (uris.isNotEmpty()) {
                 navigator.push(Route.Flash(FlashIt.FlashModules(uris)))
                 viewModel.markNeedRefresh()
             }
@@ -180,6 +215,10 @@ fun ModulePager(
         onExecuteModuleAction = { module ->
             navigator.push(Route.ExecuteModuleAction(module.id))
             viewModel.markNeedRefresh()
+        },
+        onReloadModules = {
+            // Banner edits rewrite module.prop on disk; re-read the list without a network check.
+            viewModel.fetchModuleList(checkUpdate = false, resort = false)
         },
     )
 

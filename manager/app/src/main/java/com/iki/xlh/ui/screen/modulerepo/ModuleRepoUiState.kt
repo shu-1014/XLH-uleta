@@ -5,6 +5,7 @@ import com.iki.xlh.R
 import com.iki.xlh.data.model.RepoModule
 import com.iki.xlh.data.model.RepoModuleDetail
 import com.iki.xlh.data.registry.UnsupportedSchemaException
+import com.iki.xlh.data.script.ScriptRunRecord
 import com.iki.xlh.ui.component.SearchStatus
 import java.text.Collator
 import java.util.Locale
@@ -14,7 +15,7 @@ enum class RepoSort {
     NAME,
     STARS;
 
-    /** Returns [modules] in this order; ties (and unknown star counts) fall back to newest release first. */
+    
     fun sort(modules: List<RepoModule>, locale: Locale = Locale.getDefault()): List<RepoModule> {
         if (modules.isEmpty()) return modules
         return when (this) {
@@ -49,7 +50,7 @@ enum class RepoSort {
 
 data class ModuleRepoUiState(
     val isRefreshing: Boolean = false,
-    /** A module list (possibly empty) has been loaded at least once. */
+    
     val hasLoaded: Boolean = false,
     val sortOrder: RepoSort = RepoSort.UPDATED,
     val offline: Boolean = false,
@@ -57,12 +58,12 @@ data class ModuleRepoUiState(
     val searchStatus: SearchStatus = SearchStatus(""),
     val searchResults: List<RepoModule> = emptyList(),
     val error: Throwable? = null,
-    /** The list shown is the last good cached copy (network or parsing failed). */
+    
     val stale: Boolean = false,
-    /** Installed module id -> versionCode, for "installed" / "update" badges. */
-    val installedVersions: Map<String, Int> = emptyMap(),
+    
+    val installedVersions: Map<String, Long> = emptyMap(),
 ) {
-    /** Message to show instead of the list when it is empty or could not be loaded, or null while loading. */
+    
     val emptyStateMessage: Int?
         get() = when {
             modules.isNotEmpty() || isRefreshing && !offline -> null
@@ -91,14 +92,18 @@ fun formatStarCount(count: Int): String {
     }
 }
 
-/** GitHub stargazers page of an "owner/name" repository (validated by the registry parser). */
+
 fun starsUrl(starsRepository: String?): String? =
     starsRepository?.let { "https://github.com/$it/stargazers" }
 
-/** Installed state of a registry module; updates are detected by versionCode only. */
+
 enum class RepoInstallState { NONE, INSTALLED, UPDATABLE }
 
-fun repoInstallState(installedVersionCode: Int?, latestVersionCode: Int): RepoInstallState = when {
+
+fun repoInstallStateOf(module: RepoModule, installedVersions: Map<String, Long>): RepoInstallState =
+    if (module.isScript) RepoInstallState.NONE else repoInstallState(installedVersions[module.moduleId], module.latestVersionCode)
+
+fun repoInstallState(installedVersionCode: Long?, latestVersionCode: Int): RepoInstallState = when {
     installedVersionCode == null -> RepoInstallState.NONE
     latestVersionCode > installedVersionCode -> RepoInstallState.UPDATABLE
     else -> RepoInstallState.INSTALLED
@@ -120,12 +125,17 @@ data class ModuleRepoDetailUiState(
     val module: RepoModuleArg,
     val detail: RepoModuleDetail?,
     val loaded: Boolean,
-    /** The module is not in the current index (e.g. suspended): no install entry is offered. */
+    
     val notInIndex: Boolean,
     val loadFailed: Boolean,
-    val installedVersionCode: Int?,
+    val installedVersionCode: Long?,
+    
+    val lastRun: ScriptRunRecord? = null,
 ) {
     val webUrl: String get() = detail?.webUrl.orEmpty()
+
+    
+    val isScript: Boolean get() = detail?.module?.isScript ?: module.script
     val canInstall: Boolean get() = detail != null && !notInIndex
 }
 
@@ -134,6 +144,7 @@ data class ModuleRepoDetailActions(
     val onBack: () -> Unit,
     val onOpenWebUrl: () -> Unit,
     val onOpenUrl: (String) -> Unit,
+    
     val onInstallModule: (android.net.Uri) -> Unit,
     val onRetry: () -> Unit,
 )

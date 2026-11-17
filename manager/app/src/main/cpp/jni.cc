@@ -15,12 +15,12 @@
 extern "C"
 JNIEXPORT jint JNICALL
 Java_com_iki_xlh_Natives_getVersion(JNIEnv *env, jobject) {
-    int version = get_version();
+    uint32_t version = get_version();
     if (version > 0) {
-        return version;
+        return static_cast<jint>(version);
     }
     // try legacy method as fallback
-    return legacy_get_info().first;
+    return static_cast<jint>(legacy_get_info().first);
 }
 
 extern "C"
@@ -208,7 +208,7 @@ Java_com_iki_xlh_Natives_getAppProfile(JNIEnv *env, jobject, jstring pkg, jint u
         env->SetIntField(obj, gidField, profile.rp_config.profile.gid);
 
         jobject groupList = env->GetObjectField(obj, groupsField);
-        int groupCount = profile.rp_config.profile.groups_count;
+        int groupCount = static_cast<int>(profile.rp_config.profile.groups_count);
         if (groupCount > KSU_MAX_GROUPS) {
             LOGD("kernel group count too large: %d???", groupCount);
             groupCount = KSU_MAX_GROUPS;
@@ -366,15 +366,27 @@ Java_com_iki_xlh_Natives_setSelinuxHideEnabled(JNIEnv *env, jobject thiz, jboole
 }
 
 extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_iki_xlh_Natives_isMountHideEnabled(JNIEnv *env, jobject thiz) {
+    return is_mount_hide_enabled();
+}
+
+extern "C"
 JNIEXPORT jint JNICALL
-Java_com_iki_xlh_Natives_stealthState(JNIEnv *env, jobject thiz) {
-    return get_stealth_state();
+Java_com_iki_xlh_Natives_setMountHideEnabled(JNIEnv *env, jobject thiz, jboolean enabled) {
+    return set_mount_hide_enabled(enabled);
 }
 
 extern "C"
 JNIEXPORT jboolean JNICALL
-Java_com_iki_xlh_Natives_stealthSet(JNIEnv *env, jobject thiz, jboolean enabled) {
-    return set_stealth_state(enabled);
+Java_com_iki_xlh_Natives_isAvcSpoofEnabled(JNIEnv *env, jobject thiz) {
+    return is_avc_spoof_enabled();
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_iki_xlh_Natives_setAvcSpoofEnabled(JNIEnv *env, jobject thiz, jboolean enabled) {
+    return set_avc_spoof_enabled(enabled) == 0;
 }
 
 extern "C"
@@ -432,4 +444,25 @@ Java_com_iki_xlh_magica_AppZygotePreload_forkDontCareAndExecKsud(JNIEnv *env, jc
     fork_dont_care_and_exec_ksud(path, pkg);
     env->ReleaseStringUTFChars(ksud_path, path);
     env->ReleaseStringUTFChars(pkg_name, pkg);
+}
+
+// Custom
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_iki_xlh_Natives_getFullVersion(JNIEnv *env, jobject) {
+    char buff[255] = {};
+    if (get_full_version(buff)) {
+        return env->NewStringUTF(buff);
+    }
+    return nullptr;
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_com_iki_xlh_Natives_getHookType(JNIEnv *env, jobject) {
+    char hook_type[32] = {};
+    if (get_hook_type(hook_type)) {
+        return env->NewStringUTF(hook_type);
+    }
+    return nullptr;
 }

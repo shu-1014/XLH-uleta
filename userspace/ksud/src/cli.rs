@@ -7,7 +7,9 @@ use log::{LevelFilter, error, info};
 
 use crate::boot_patch::{BootPatchArgs, BootRestoreArgs};
 use crate::lkm_image::BootPatchV2Args;
-use crate::module::regenerate_preinit_rc;
+use crate::module::regenerate_preinit;
+#[cfg(target_arch = "aarch64")]
+use crate::susfs;
 use crate::{
     apk_sign, assets, debug, defs, init_event, ksu_uapi, ksucalls, module, module_config, sulog,
     umount, utils,
@@ -22,21 +24,23 @@ struct Args {
 }
 
 #[derive(clap::Subcommand, Debug)]
+#[allow(clippy::large_enum_variant)]
 enum Commands {
-    /// Prepare the independent dialer recovery listener before hiding the icon
-    Stealth {
+    /// Best-effort userspace temporary root leases (not kernel-enforced)
+    TemporaryRoot {
         #[command(subcommand)]
-        command: crate::stealth::StealthCommand,
-    },
-    /// Manage the local 🐾星棱狐🐾 web manager (127.0.0.1:9178)
-    Webui {
-        #[command(subcommand)]
-        command: crate::webui::WebCommand,
+        command: TemporaryRoot,
     },
     /// Manage KernelSU modules
     Module {
         #[command(subcommand)]
         command: Module,
+    },
+
+    /// Manage built-in Zygisk
+    Zygisk {
+        #[command(subcommand)]
+        command: ZygiskCommand,
     },
 
     /// Trigger `post-fs-data` event
@@ -73,6 +77,14 @@ enum Commands {
         /// manager package name
         #[arg(long, default_value_t = String::from(defs::DEFAULT_PACKAGE_NAME))]
         package_name: String,
+
+        /// kernel release string to spoof
+        #[arg(long)]
+        spoof_release: Option<String>,
+
+        /// kernel version string to spoof
+        #[arg(long)]
+        spoof_version: Option<String>,
     },
 
     /// Emulate system reboot
@@ -123,6 +135,12 @@ enum Commands {
         command: Feature,
     },
 
+    /// Manage kernel extensions (KPM, CPU spoof, umount paths, dynamic manager)
+    Extension {
+        #[command(subcommand)]
+        command: Extension,
+    },
+
     /// Patch boot or init_boot images to apply KernelSU
     BootPatch(BootPatchArgs),
 
@@ -134,16 +152,24 @@ enum Commands {
     /// Always operates on a boot image; never selects init_boot or vendor_boot.
     BootPatchV2(BootPatchV2Args),
 
+    /// Extract or replace the kernel block without modifying the ramdisk.
+    BootKernel {
+        #[command(subcommand)]
+        command: crate::boot_patch::BootKernelCommand,
+    },
+
     /// Show boot information
     BootInfo {
         #[command(subcommand)]
         command: BootInfo,
     },
+
     /// For developers
     Debug {
         #[command(subcommand)]
         command: Debug,
     },
+
     /// Kernel interface
     Kernel {
         #[command(subcommand)]
@@ -169,6 +195,67 @@ enum Commands {
         #[command(subcommand)]
         command: Umount,
     },
+
+    /// KPM module manager
+    #[cfg(target_arch = "aarch64")]
+    Kpm {
+        #[command(subcommand)]
+        command: kpm_cmd::Kpm,
+    },
+
+    #[cfg(target_arch = "aarch64")]
+    /// Susfs
+    Susfs {
+        #[command(subcommand)]
+        command: Susfs,
+    },
+
+    /// Manage dynamic userspace managers
+    Manager {
+        #[command(subcommand)]
+        command: Manager,
+    },
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum ZygiskCommand {
+    /// Enable built-in Zygisk and start it now
+    On,
+    /// Disable built-in Zygisk
+    Off,
+    /// Check built-in Zygisk status
+    Status,
+    /// Report the active Zygisk implementation (running, reboot, disabled or none)
+    Info,
+    /// Switch to the built-in Zygisk or to an installed provider module, live
+    Switch {
+        /// `builtin` or the id of an installed Zygisk module
+        #[arg(default_value = "builtin")]
+        target: String,
+    },
+    /// List the monitor and daemon processes of an implementation as JSON
+    Processes {
+        /// `builtin` or the id of an installed Zygisk module
+        #[arg(default_value = "builtin")]
+        target: String,
+    },
+    /// List the Zygisk modules the built-in is serving, with their processes, as JSON
+    Modules,
+    /// Reload built-in Zygisk
+    Rearm,
+    /// Read or change NyaZygisk options (`config.prop`)
+    Config {
+        #[command(subcommand)]
+        command: ZygiskConfigCommand,
+    },
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum ZygiskConfigCommand {
+    /// Print all options as JSON
+    Get,
+    /// Set one option, e.g. `ksud zygisk config set custom_linker 1`
+    Set { key: String, value: String },
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -178,9 +265,6 @@ enum BootInfo {
 
     /// show supported kmi versions
     SupportedKmis,
-
-    /// show the running kernel flavour and version (gki | non-gki, 4.14.190)
-    KernelFlavor,
 
     /// check if device is A/B capable
     IsAbDevice,
@@ -197,6 +281,9 @@ enum BootInfo {
         #[arg(short = 'u', long, default_value = "false")]
         ota: bool,
     },
+
+    /// read ksu_config from ramdisk
+    ReadConfig,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -337,8 +424,23 @@ enum Module {
         id: String,
     },
 
+    /// module lua runner
+    #[cfg(all(target_os = "android", target_arch = "aarch64"))]
+    Lua {
+        // module id
+        id: String,
+        // lua function
+        function: String,
+    },
+
     /// list all modules
     List,
+
+    /// preinit actions run before SELinux policy is loaded
+    Preinit {
+        #[command(subcommand)]
+        command: PreinitCmd,
+    },
 
     /// manage module configuration
     Config {
@@ -348,6 +450,14 @@ enum Module {
         #[command(subcommand)]
         command: ModuleConfigCmd,
     },
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum PreinitCmd {
+    /// show per-module preinit state for the next boot
+    Status,
+    /// re-enable preinit after it was disabled by repeated failed boots
+    Reset,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -433,10 +543,37 @@ enum Profile {
 }
 
 #[derive(clap::Subcommand, Debug)]
+enum TemporaryRoot {
+    Set {
+        uid: i32,
+        key: String,
+        manager: u32,
+        seconds: u64,
+    },
+    Clear {
+        uid: i32,
+    },
+    Status {
+        uid: i32,
+    },
+    /// Atomically save a profile and its lease under the watcher lock.
+    Apply {
+        manager: u32,
+        lease: String,
+        #[arg(action = clap::ArgAction::Set)]
+        expected_root: bool,
+        json: String,
+    },
+    #[command(hide = true)]
+    Watch,
+}
+
+#[derive(clap::Subcommand, Debug)]
 enum Feature {
     /// Get feature value and support status
     Get {
-        /// Feature ID or name (su_compat, kernel_umount, sulog, adb_root, selinux_hide, shell_su_adb_only)
+        /// Feature ID or name (su_compat, kernel_umount, sulog, adb_root, selinux_hide, avc_spoof,
+        /// shell_su_adb_only, mount_hide)
         id: String,
         /// Read from config file
         #[arg(long, default_value_t = false)]
@@ -456,7 +593,8 @@ enum Feature {
 
     /// Check feature status (supported/unsupported/managed/forced)
     Check {
-        /// Feature ID or name (su_compat, kernel_umount, sulog, adb_root, selinux_hide, shell_su_adb_only)
+        /// Feature ID or name (su_compat, kernel_umount, sulog, adb_root, selinux_hide, avc_spoof,
+        /// shell_su_adb_only, mount_hide)
         id: String,
     },
 
@@ -465,6 +603,75 @@ enum Feature {
 
     /// Save current kernel feature states to file
     Save,
+}
+
+#[derive(clap::Subcommand, Debug)]
+#[clap(name = "extension")]
+enum Extension {
+    /// Configure KernelSU version responses
+    VersionSpoof {
+        #[command(subcommand)]
+        command: VersionSpoof,
+    },
+    /// Get extension value and support status
+    Get {
+        /// Extension ID or name (kpm, cpu_spoof, umount_paths, dynamic_manager)
+        id: String,
+        /// Read from config file
+        #[arg(long, default_value_t = false)]
+        config: bool,
+    },
+
+    /// Set extension sticky value (the toggle bit shown in UI)
+    Set {
+        /// Extension ID or name
+        id: String,
+        /// Extension value (0=disable, 1=enable)
+        value: u64,
+    },
+
+    /// List all known extensions with their current kernel support state
+    List,
+
+    /// Check extension status (supported/unsupported/managed/forced)
+    Check {
+        /// Extension ID or name (kpm, cpu_spoof, umount_paths, dynamic_manager)
+        id: String,
+    },
+
+    /// Load extension configuration from file and apply to kernel
+    Load,
+
+    /// Save current extension states to file
+    Save,
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum VersionSpoof {
+    /// Read current kernel overrides as JSON
+    Get,
+    /// Replace all overrides; omitted fields use build values
+    Set {
+        #[arg(long)]
+        version: Option<u32>,
+        #[arg(long)]
+        full: Option<String>,
+        #[arg(long)]
+        uapi: Option<u32>,
+        /// Confirm that custom version/UAPI values can break compatibility.
+        #[arg(long, default_value_t = false)]
+        acknowledge_compatibility: bool,
+    },
+    /// Restore build values and remove saved overrides
+    Reset,
+    /// Read the home-page version warning visibility setting
+    WarningGet,
+    /// Set whether the home-page version warning is hidden
+    WarningSet {
+        /// `true` hides the warning; `false` shows it
+        #[arg(long)]
+        hidden: bool,
+    },
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -481,6 +688,33 @@ enum Kernel {
     },
     /// Notify that module is mounted
     NotifyModuleMounted,
+    /// Spoof kernel release and version strings
+    SpoofUname {
+        /// kernel release string (e.g. 5.10.117-android12-9)
+        #[arg(short, long)]
+        release: Option<String>,
+        /// kernel version string (e.g. #1 SMP PREEMPT Mon May 19 2026)
+        #[arg(short, long)]
+        version: Option<String>,
+    },
+    /// Spoof CPU identity (MIDR/HWCAP/vvar) at runtime
+    SpoofCpu {
+        /// Target CPU index (0..=num_possible_cpus-1)
+        #[arg(short, long)]
+        cpu: u32,
+        /// MIDR value (hex, e.g. 0x413fd0c1)
+        #[arg(short, long, value_parser = parse_hex_u32)]
+        midr: u32,
+        /// BogoMIPS value (decimal, e.g. 2400)
+        #[arg(short, long, default_value_t = 0)]
+        bogomips: u32,
+        /// Primary ELF hwcap mask (hex)
+        #[arg(long, value_parser = parse_hex_u64, default_value_t = 0)]
+        hwcap: u64,
+        /// Secondary ELF hwcap2 mask (hex)
+        #[arg(long, value_parser = parse_hex_u64, default_value_t = 0)]
+        hwcap2: u64,
+    },
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -504,7 +738,7 @@ enum UmountOp {
 
 #[derive(clap::Subcommand, Debug)]
 enum Initrc {
-    /// Regenerate preinit rc file
+    /// Regenerate preinit rc file and preinit dirs
     Refresh,
 }
 
@@ -533,6 +767,218 @@ enum Umount {
     ClearCustom,
 }
 
+#[cfg(target_arch = "aarch64")]
+mod kpm_cmd {
+    use clap::Subcommand;
+    use std::path::PathBuf;
+
+    #[derive(Subcommand, Debug)]
+    pub enum Kpm {
+        /// Load a KPM module: load <path> [args]
+        Load { path: PathBuf, args: Option<String> },
+        /// Unload a KPM module: unload <name>
+        Unload { name: String },
+        /// Get number of loaded modules
+        Num,
+        /// List loaded KPM modules
+        List,
+        /// Get info of a KPM module: info <name>
+        Info { name: String },
+        /// Send control command to a KPM module: control <name> <args>
+        Control { name: String, args: String },
+        /// Print KPM Loader version
+        Version,
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+#[derive(clap::Subcommand, Debug)]
+enum Susfs {
+    /// Get SUSFS Status
+    Status,
+    /// Get SUSFS Version
+    Version,
+    /// Get SUSFS Variant
+    Variant,
+    /// Get SUSFS implementation: builtin, lkm, unsupported or unknown
+    Implementation,
+    /// Get SUSFS enabled Features
+    Features,
+    /// Spoof kernel uname
+    SetUname {
+        /// kernel release string
+        release: String,
+        /// kernel version string
+        version: String,
+    },
+    /// Enable or disable SUSFS kernel log
+    EnableLog {
+        /// 0 to disable, 1 to enable
+        enabled: u32,
+    },
+    /// Enable or disable AVC log spoofing
+    EnableAvcLogSpoofing {
+        /// 0 to disable, 1 to enable
+        enabled: u32,
+    },
+    /// Spoof /proc/cmdline (non-gki) or /proc/bootconfig (gki) from a text file
+    SetCmdlineOrBootconfig {
+        /// path to the fake cmdline/bootconfig file
+        path: String,
+    },
+    /// Hide SUS mounts for non-su processes
+    HideSusMntsForNonSuProcs {
+        /// 0 to disable, 1 to enable
+        enabled: u32,
+    },
+    /// Add open redirect
+    AddOpenRedirect {
+        /// target path
+        target: String,
+        /// redirected path
+        redirected: String,
+        /// uid scheme
+        uid_scheme: u32,
+    },
+    /// Replace the priority UID filter with a comma-separated package list
+    SetPriorityUidFilter { packages: String },
+    /// Replace the sus_path UID allow-list with a comma-separated package list
+    SetSusPathUidFilter { packages: String },
+    /// Add SUS map
+    AddSusMap {
+        /// library path
+        path: String,
+    },
+    /// Add SUS path
+    AddSusPath {
+        /// path to add
+        path: String,
+    },
+    /// Add SUS loop path
+    AddSusPathLoop {
+        /// path to add
+        path: String,
+    },
+    /// Add SUS kstat
+    AddSusKstat {
+        /// path to add
+        path: String,
+    },
+    /// Update SUS kstat
+    UpdateSusKstat {
+        /// path to update
+        path: String,
+    },
+    /// Update SUS kstat full clone
+    UpdateSusKstatFullClone {
+        /// path to update
+        path: String,
+    },
+    /// Add SUS kstat statically
+    AddSusKstatStatically {
+        /// path
+        path: String,
+        /// ino (`default` keeps the current value)
+        ino: String,
+        /// dev (`default` keeps the current value)
+        dev: String,
+        /// nlink (`default` keeps the current value)
+        nlink: String,
+        /// size (`default` keeps the current value)
+        size: String,
+        /// atime sec (`default` keeps the current value)
+        atime_sec: String,
+        /// atime nsec (`default` keeps the current value)
+        atime_nsec: String,
+        /// mtime sec (`default` keeps the current value)
+        mtime_sec: String,
+        /// mtime nsec (`default` keeps the current value)
+        mtime_nsec: String,
+        /// ctime sec (`default` keeps the current value)
+        ctime_sec: String,
+        /// ctime nsec (`default` keeps the current value)
+        ctime_nsec: String,
+        /// blocks (`default` keeps the current value)
+        blocks: String,
+        /// blksize (`default` keeps the current value)
+        blksize: String,
+    },
+    /// Manage the SuSFS Magisk auto-start module
+    Module {
+        #[cfg(target_arch = "aarch64")]
+        #[clap(subcommand)]
+        command: SusfsModuleCmd,
+    },
+    /// Manage SuSFS persistent configuration
+    Config {
+        #[cfg(target_arch = "aarch64")]
+        #[clap(subcommand)]
+        command: SusfsConfigCmd,
+    },
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum Manager {
+    /// List dynamic managers and global state
+    List,
+    /// Authorize a manager using its package, certificate size and SHA-256
+    Add {
+        package: String,
+        cert_size: u32,
+        hash: String,
+    },
+    /// Remove a manager by package name
+    Remove { package: String },
+    /// Enable or disable dynamic managers (true/false or 1/0)
+    SetEnabled { enabled: String },
+    /// Remove all dynamic managers
+    Clear,
+}
+
+/// susfs module subcommands
+#[cfg(target_arch = "aarch64")]
+#[derive(clap::Subcommand, Debug)]
+pub enum SusfsModuleCmd {
+    /// Install (or reinstall) the SuSFS auto-start module from saved config
+    Install,
+    /// Remove the SuSFS auto-start module
+    Remove,
+    /// Check if the module is installed
+    Status,
+}
+
+/// susfs config subcommands
+#[cfg(target_arch = "aarch64")]
+#[derive(clap::Subcommand, Debug)]
+pub enum SusfsConfigCmd {
+    /// Get a config value by key
+    Get {
+        /// Config key (e.g. sus_paths, enable_log)
+        key: String,
+    },
+    /// Set a config value
+    Set {
+        /// Config key
+        key: String,
+        /// Config value (use empty string to clear a multi-value key)
+        value: String,
+    },
+    /// Remove a config key
+    Remove {
+        /// Config key
+        key: String,
+    },
+    /// Clear all config values
+    Clear,
+    /// Reset all config keys to defaults
+    Reset,
+    /// List all config key=value pairs (one per line)
+    List {
+        #[arg(long)]
+        json: bool,
+    },
+}
+
 pub fn run() -> Result<()> {
     android_logger::init_once(
         Config::default()
@@ -558,8 +1004,6 @@ pub fn run() -> Result<()> {
     log::info!("command: {:?}", cli.command);
 
     let result = match cli.command {
-        Commands::Stealth { command } => crate::stealth::run(command),
-        Commands::Webui { command } => crate::webui::run(command),
         Commands::PostFsData => init_event::on_post_fs_data(),
         Commands::BootCompleted => {
             init_event::on_boot_completed();
@@ -579,7 +1023,18 @@ pub fn run() -> Result<()> {
                 Module::Enable { id } => module::enable_module(&id),
                 Module::Disable { id } => module::disable_module(&id),
                 Module::Action { id } => module::run_action(&id),
+                #[cfg(all(target_os = "android", target_arch = "aarch64"))]
+                Module::Lua { id, function } => {
+                    module::run_lua(&id, &function, false, true).map_err(|e| anyhow::anyhow!("{e}"))
+                }
                 Module::List => module::list_modules(),
+                Module::Preinit { command } => match command {
+                    PreinitCmd::Status => {
+                        crate::preinit::print_status();
+                        Ok(())
+                    }
+                    PreinitCmd::Reset => crate::preinit::reset_bootcount(),
+                },
                 Module::Config { internal, command } => {
                     let module_id = match internal {
                         Some(internal_name) => format!("internal.{internal_name}"),
@@ -689,6 +1144,8 @@ pub fn run() -> Result<()> {
             post_magica,
             kmi,
             package_name,
+            spoof_release,
+            spoof_version,
         } => {
             if let Some(port) = magica {
                 return crate::magica::run(port, &package_name, allow_shell).map_err(|e| {
@@ -696,7 +1153,13 @@ pub fn run() -> Result<()> {
                     e
                 });
             }
-            let result = crate::late_load::run(&package_name, kmi, allow_shell);
+            let result = crate::late_load::run(
+                &package_name,
+                kmi,
+                allow_shell,
+                spoof_release.as_ref(),
+                spoof_version.as_ref(),
+            );
             if post_magica {
                 info!("Restoring adb properties (post-magica cleanup)...");
                 if let Err(e) = crate::magica::disable_adb_root() {
@@ -714,17 +1177,75 @@ pub fn run() -> Result<()> {
             Ok(())
         }
         Commands::Sulogd => sulog::run_sulogd(),
+        Commands::TemporaryRoot { command } => match command {
+            TemporaryRoot::Set {
+                uid,
+                key,
+                manager,
+                seconds,
+            } => crate::temporary_root::set(uid, key, manager, seconds),
+            TemporaryRoot::Clear { uid } => crate::temporary_root::clear(uid),
+            TemporaryRoot::Status { uid } => crate::temporary_root::status(uid),
+            TemporaryRoot::Apply {
+                manager,
+                lease,
+                expected_root,
+                json,
+            } => crate::temporary_root::apply(manager, &lease, expected_root, &json),
+            TemporaryRoot::Watch => crate::temporary_root::watch(),
+        },
         Commands::Profile { command } => match command {
-            Profile::GetSepolicy { package } => crate::profile::get_sepolicy(package),
+            Profile::GetSepolicy { package } => crate::profile::get_sepolicy(&package),
             Profile::SetSepolicy { package, policy } => {
-                crate::profile::set_sepolicy(package, policy)
+                crate::profile::set_sepolicy(&package, policy)
             }
-            Profile::GetTemplate { id } => crate::profile::get_template(id),
-            Profile::SetTemplate { id, template } => crate::profile::set_template(id, template),
-            Profile::DeleteTemplate { id } => crate::profile::delete_template(id),
+            Profile::GetTemplate { id } => crate::profile::get_template(&id),
+            Profile::SetTemplate { id, template } => crate::profile::set_template(&id, template),
+            Profile::DeleteTemplate { id } => crate::profile::delete_template(&id),
             Profile::ListTemplates => crate::profile::list_templates(),
         },
 
+        Commands::Manager { command } => match command {
+            Manager::List => {
+                let state = crate::dynamic_manager::manager_get()?;
+                println!("enabled: {}", state.enabled != 0);
+                for entry in state.entries.iter().take(state.count as usize) {
+                    let package = String::from_utf8_lossy(unsafe {
+                        std::slice::from_raw_parts(
+                            entry.package.as_ptr().cast::<u8>(),
+                            entry.package.len(),
+                        )
+                    })
+                    .trim_end_matches('\0')
+                    .to_string();
+                    let hash = String::from_utf8_lossy(unsafe {
+                        std::slice::from_raw_parts(
+                            entry.hash.as_ptr().cast::<u8>(),
+                            entry.hash.len(),
+                        )
+                    })
+                    .trim_end_matches('\0')
+                    .to_string();
+                    println!("{package}\t{}\t{hash}\t{}", entry.cert_size, entry.uid);
+                }
+                Ok(())
+            }
+            Manager::Add {
+                package,
+                cert_size,
+                hash,
+            } => crate::dynamic_manager::manager_add(&package, cert_size, &hash),
+            Manager::Remove { package } => crate::dynamic_manager::manager_remove(&package),
+            Manager::SetEnabled { enabled } => {
+                let enabled = match enabled.as_str() {
+                    "1" | "true" => true,
+                    "0" | "false" => false,
+                    _ => anyhow::bail!("enabled must be true, false, 1, or 0"),
+                };
+                crate::dynamic_manager::manager_set_enabled(enabled)
+            }
+            Manager::Clear => crate::dynamic_manager::manager_clear(),
+        },
         Commands::Feature { command } => match command {
             Feature::Get { id, config } => {
                 if config {
@@ -742,12 +1263,186 @@ pub fn run() -> Result<()> {
             Feature::Load => crate::feature::load_config_and_apply(),
             Feature::Save => crate::feature::save_config(),
         },
+        Commands::Extension { command } => match command {
+            Extension::VersionSpoof { command } => match command {
+                VersionSpoof::Get => crate::version_spoof::print_config(),
+                VersionSpoof::Set {
+                    version,
+                    full,
+                    uapi,
+                    acknowledge_compatibility,
+                } => crate::version_spoof::set(version, full, uapi, acknowledge_compatibility),
+                VersionSpoof::Reset => crate::version_spoof::reset(),
+                VersionSpoof::WarningGet => {
+                    println!("{}", crate::version_spoof::warning_hidden()?);
+                    Ok(())
+                }
+                VersionSpoof::WarningSet { hidden } => {
+                    crate::version_spoof::set_warning_hidden(hidden)
+                }
+            },
+            Extension::Get { id, config } => {
+                if config {
+                    crate::extension::get_extension_config_cli(&id)
+                } else {
+                    crate::extension::get_extension_cli(&id)
+                }
+            }
+            Extension::Set { id, value } => crate::extension::set_extension_cli(&id, value),
+            Extension::List => {
+                crate::extension::list_extensions();
+                Ok(())
+            }
+            Extension::Check { id } => crate::extension::check_extension(&id),
+            Extension::Load => crate::extension::load_config_and_apply(),
+            Extension::Save => crate::extension::save_config(),
+        },
+
+        Commands::Zygisk { command } => match command {
+            ZygiskCommand::On => {
+                // The flag alone would only count from the next boot; turning it on also
+                // hands the running system over.
+                crate::builtin_zygisk::switch_to(crate::builtin_zygisk::BUILTIN_TARGET)?;
+                println!("true");
+                Ok(())
+            }
+            ZygiskCommand::Off => {
+                crate::builtin_zygisk::disable()?;
+                println!("true");
+                Ok(())
+            }
+            ZygiskCommand::Status => {
+                let enabled = crate::builtin_zygisk::is_enabled();
+                // The report in module.prop identifies the built-in; process names
+                // alone are shared with the standalone builds.
+                let monitor_running = crate::builtin_zygisk::is_monitor_active();
+                let daemon_running = crate::builtin_zygisk::is_daemon_active();
+                let zygote_injected = crate::builtin_zygisk::is_zygote_injected();
+                let fully_active = crate::builtin_zygisk::is_fully_active();
+                let zygotes: Vec<_> = crate::builtin_zygisk::zygote_states()
+                    .into_iter()
+                    .map(|(abi, status)| serde_json::json!({ "abi": abi, "status": status }))
+                    .collect();
+                let monitor = crate::builtin_zygisk::monitor_process();
+                let daemons = crate::builtin_zygisk::daemon_processes();
+                let (version, version_code) = crate::builtin_zygisk::version().unwrap_or_default();
+                let monitor_json =
+                    monitor.map(|(pid, name)| serde_json::json!({ "name": name, "pid": pid }));
+                let daemons_json: Vec<_> = daemons
+                    .into_iter()
+                    .map(|(pid, name)| serde_json::json!({ "name": name, "pid": pid }))
+                    .collect();
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "enabled": enabled,
+                        "monitor_running": monitor_running,
+                        "daemon_running": daemon_running,
+                        "zygote_injected": zygote_injected,
+                        "fully_active": fully_active,
+                        "zygotes": zygotes,
+                        "monitor": monitor_json,
+                        "daemons": daemons_json,
+                        "version": version,
+                        "version_code": version_code,
+                    })
+                );
+                Ok(())
+            }
+            ZygiskCommand::Info => {
+                let info = crate::builtin_zygisk::implementation_info();
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "state": info.state,
+                        "id": info.id,
+                        "name": info.name,
+                        "version": info.version,
+                        "providers": crate::builtin_zygisk::provider_ids(),
+                    })
+                );
+                Ok(())
+            }
+            ZygiskCommand::Switch { target } => {
+                crate::builtin_zygisk::switch_to(&target)?;
+                println!("true");
+                Ok(())
+            }
+            ZygiskCommand::Processes { target } => {
+                let procs = crate::builtin_zygisk::processes(&target)?;
+                let list = |entries: Vec<(i32, String)>| {
+                    entries
+                        .into_iter()
+                        .map(|(pid, name)| serde_json::json!({ "name": name, "pid": pid }))
+                        .collect::<Vec<serde_json::Value>>()
+                };
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "monitors": list(procs.monitors),
+                        "daemons": list(procs.daemons),
+                    })
+                );
+                Ok(())
+            }
+            ZygiskCommand::Modules => {
+                let modules: Vec<serde_json::Value> = crate::builtin_zygisk::injected_modules()
+                    .into_iter()
+                    .map(|module| {
+                        let processes: Vec<serde_json::Value> = module
+                            .processes
+                            .into_iter()
+                            .map(|(name, pid, kind)| {
+                                serde_json::json!({
+                                    "name": name,
+                                    "pid": pid,
+                                    "kind": kind,
+                                })
+                            })
+                            .collect();
+                        serde_json::json!({
+                            "id": module.id,
+                            "name": module.name,
+                            "version": module.version,
+                            "type": module.kind,
+                            "abi": module.abi,
+                            "targets": module.targets,
+                            "companion": module.companion,
+                            "state": module.state,
+                            "processes": processes,
+                        })
+                    })
+                    .collect();
+                println!("{}", serde_json::json!({ "modules": modules }));
+                Ok(())
+            }
+            ZygiskCommand::Rearm => {
+                crate::builtin_zygisk::rearm()?;
+                println!("true");
+                Ok(())
+            }
+            ZygiskCommand::Config { command } => match command {
+                ZygiskConfigCommand::Get => {
+                    let fields: Vec<String> = crate::builtin_zygisk::config_get_all()
+                        .into_iter()
+                        .map(|(k, v)| format!(r#""{k}":"{v}""#))
+                        .collect();
+                    println!("{{{}}}", fields.join(","));
+                    Ok(())
+                }
+                ZygiskConfigCommand::Set { key, value } => {
+                    crate::builtin_zygisk::config_set(&key, &value)?;
+                    println!("true");
+                    Ok(())
+                }
+            },
+        },
 
         Commands::Debug { command } => match command {
             Debug::SetManager { apk } => debug::set_manager(&apk),
             Debug::GetSign { apk } => {
                 let sign = apk_sign::get_apk_signature(&apk)?;
-                println!("size: {:#x}, hash: {}", sign.0, sign.1);
+                println!("size: {}, hash: {}", sign.0, sign.1);
                 Ok(())
             }
             Debug::Version => {
@@ -808,16 +1503,6 @@ pub fn run() -> Result<()> {
                 }
                 return Ok(());
             }
-            BootInfo::KernelFlavor => {
-                let (major, minor, patch) = crate::boot_patch::get_kernel_version()?;
-                let flavor = if crate::boot_patch::is_gki_version(major, minor) {
-                    "gki"
-                } else {
-                    "non-gki"
-                };
-                println!("{flavor} {major}.{minor}.{patch}");
-                return Ok(());
-            }
             BootInfo::IsAbDevice => {
                 let val = crate::utils::getprop("ro.build.ab_update")
                     .unwrap_or_else(|| String::from("false"));
@@ -843,9 +1528,17 @@ pub fn run() -> Result<()> {
                 }
                 return Ok(());
             }
+            BootInfo::ReadConfig => {
+                let config = crate::boot_patch::read_ksu_config()?;
+                for line in &config {
+                    println!("{line}");
+                }
+                return Ok(());
+            }
         },
         Commands::BootRestore(boot_restore) => crate::boot_patch::restore(boot_restore),
         Commands::BootPatchV2(patch) => crate::lkm_image::patch_boot(&patch),
+        Commands::BootKernel { command } => crate::boot_patch::boot_kernel(command),
         Commands::Resetprop { args } => {
             let mut full_args = vec!["resetprop".to_string()];
             full_args.extend(args);
@@ -863,23 +1556,214 @@ pub fn run() -> Result<()> {
                 ksucalls::report_module_mounted();
                 Ok(())
             }
+            Kernel::SpoofUname { release, version } => {
+                let r = release.unwrap_or_default();
+                let v = version.unwrap_or_default();
+                ksucalls::set_spoof_version(&r, &v)
+            }
+            Kernel::SpoofCpu {
+                cpu,
+                midr,
+                bogomips,
+                hwcap,
+                hwcap2,
+            } => ksucalls::set_spoof_cpu(cpu, midr, bogomips, hwcap, hwcap2),
         },
         Commands::Initrc { command } => match command {
-            Initrc::Refresh => regenerate_preinit_rc(),
+            Initrc::Refresh => regenerate_preinit(),
         },
         Commands::Umount { command } => match command {
-            // `add` only mutates the kernel list; persistence is done by `save`.
             Umount::Add { mnt, flags } => ksucalls::umount_list_add(&mnt, flags),
             Umount::Remove { mnt } => umount::remove_umount_entry_from_config(&mnt),
-            Umount::List => umount::list_umount_config(),
+            Umount::List => {
+                let list = ksucalls::umount_list_list()?;
+                print!("{list}");
+                Ok(())
+            }
             Umount::Save => umount::save_umount_config(),
             Umount::Apply => umount::apply_umount_config(),
             Umount::ClearCustom => umount::clear_umount_config(),
         },
+        #[cfg(target_arch = "aarch64")]
+        Commands::Kpm { command } => {
+            use crate::cli::kpm_cmd::Kpm;
+            match command {
+                Kpm::Load { path, args } => {
+                    crate::kpm::load_module(path.to_str().unwrap(), args.as_deref())
+                }
+                Kpm::Unload { name } => crate::kpm::unload_module(&name),
+                Kpm::Num => crate::kpm::num().map(|_| ()),
+                Kpm::List => crate::kpm::list(),
+                Kpm::Info { name } => crate::kpm::info(&name),
+                Kpm::Control { name, args } => {
+                    let ret = crate::kpm::control(&name, args)?;
+                    println!("{ret}");
+                    Ok(())
+                }
+                Kpm::Version => crate::kpm::version(),
+            }
+        }
+        #[cfg(target_arch = "aarch64")]
+        Commands::Susfs { command } => {
+            let _ = match command {
+                Susfs::Status => {
+                    println!("{}", susfs::get_susfs_status());
+                    Ok(())
+                }
+                Susfs::Version => {
+                    println!("{}", susfs::get_susfs_version());
+                    Ok(())
+                }
+                Susfs::Variant => {
+                    println!("{}", susfs::get_susfs_variant());
+                    Ok(())
+                }
+                Susfs::Implementation => {
+                    println!("{}", susfs::get_susfs_implementation());
+                    Ok(())
+                }
+                Susfs::Features => {
+                    println!("{}", susfs::get_susfs_features());
+                    Ok(())
+                }
+                Susfs::SetUname { release, version } => susfs::set_uname(&release, &version),
+                Susfs::EnableLog { enabled } => susfs::enable_log(enabled != 0),
+                Susfs::EnableAvcLogSpoofing { enabled } => {
+                    susfs::enable_avc_log_spoofing(enabled != 0)
+                }
+                Susfs::SetCmdlineOrBootconfig { path } => susfs::set_cmdline_or_bootconfig(&path),
+                Susfs::HideSusMntsForNonSuProcs { enabled } => {
+                    susfs::hide_sus_mnts_for_non_su_procs(enabled != 0)
+                }
+                Susfs::AddOpenRedirect {
+                    target,
+                    redirected,
+                    uid_scheme,
+                } => susfs::add_open_redirect(&target, &redirected, uid_scheme),
+                Susfs::SetPriorityUidFilter { packages } => {
+                    susfs::set_priority_uid_filter(&packages)
+                }
+                Susfs::SetSusPathUidFilter { packages } => {
+                    susfs::set_sus_path_uid_filter(&packages)
+                }
+                Susfs::AddSusMap { path } => susfs::add_sus_map(&path),
+                Susfs::AddSusPath { path } => susfs::add_sus_path(&path),
+                Susfs::AddSusPathLoop { path } => susfs::add_sus_path_loop(&path),
+                Susfs::AddSusKstat { path } => susfs::add_sus_kstat(&path),
+                Susfs::UpdateSusKstat { path } => susfs::update_sus_kstat(&path),
+                Susfs::UpdateSusKstatFullClone { path } => {
+                    susfs::update_sus_kstat_full_clone(&path)
+                }
+                Susfs::AddSusKstatStatically {
+                    path,
+                    ino,
+                    dev,
+                    nlink,
+                    size,
+                    atime_sec,
+                    atime_nsec,
+                    mtime_sec,
+                    mtime_nsec,
+                    ctime_sec,
+                    ctime_nsec,
+                    blocks,
+                    blksize,
+                } => susfs::add_sus_kstat_statically(
+                    &path,
+                    &ino,
+                    &dev,
+                    &nlink,
+                    &size,
+                    &atime_sec,
+                    &atime_nsec,
+                    &mtime_sec,
+                    &mtime_nsec,
+                    &ctime_sec,
+                    &ctime_nsec,
+                    &blocks,
+                    &blksize,
+                ),
+                Susfs::Module { command } => {
+                    use crate::susfs_module;
+                    match command {
+                        SusfsModuleCmd::Install => {
+                            susfs_module::install_module()?;
+                            println!("SuSFS module installed successfully");
+                        }
+                        SusfsModuleCmd::Remove => {
+                            susfs_module::remove_module()?;
+                            println!("SuSFS module removed successfully");
+                        }
+                        SusfsModuleCmd::Status => {
+                            if susfs_module::is_module_installed() {
+                                println!("installed");
+                            } else {
+                                println!("not installed");
+                            }
+                        }
+                    }
+                    Ok(())
+                }
+                Susfs::Config { command } => {
+                    use crate::susfs_config;
+                    match command {
+                        SusfsConfigCmd::Get { key } => {
+                            println!("{}", susfs_config::get(&key)?);
+                        }
+                        SusfsConfigCmd::Set { key, value } => {
+                            susfs_config::set(&key, &value)?;
+                            println!("ok");
+                        }
+                        SusfsConfigCmd::Remove { key } => {
+                            susfs_config::remove(&key)?;
+                            println!("ok");
+                        }
+                        SusfsConfigCmd::Clear => {
+                            susfs_config::clear()?;
+                            println!("ok");
+                        }
+                        SusfsConfigCmd::Reset => {
+                            susfs_config::reset_to_defaults()?;
+                            println!("ok");
+                        }
+                        SusfsConfigCmd::List { json } => {
+                            let output = if json {
+                                serde_json::to_string(&susfs_config::store::load_config()?)?
+                            } else {
+                                susfs_config::export_json()?
+                            };
+                            println!("{output}");
+                        }
+                    }
+                    Ok(())
+                }
+            };
+            Ok(())
+        }
     };
 
     if let Err(e) = &result {
         log::error!("Error: {e:?}");
     }
     result
+}
+
+fn parse_hex_u32(s: &str) -> Result<u32, String> {
+    let s = s.trim();
+    s.strip_prefix("0x")
+        .or_else(|| s.strip_prefix("0X"))
+        .map_or_else(
+            || s.parse::<u32>().map_err(|e| format!("Invalid u32: {e}")),
+            |hex| u32::from_str_radix(hex, 16).map_err(|e| format!("Invalid hex u32: {e}")),
+        )
+}
+
+fn parse_hex_u64(s: &str) -> Result<u64, String> {
+    let s = s.trim();
+    s.strip_prefix("0x")
+        .or_else(|| s.strip_prefix("0X"))
+        .map_or_else(
+            || s.parse::<u64>().map_err(|e| format!("Invalid u64: {e}")),
+            |hex| u64::from_str_radix(hex, 16).map_err(|e| format!("Invalid hex u64: {e}")),
+        )
 }

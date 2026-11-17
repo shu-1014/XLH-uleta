@@ -1,3 +1,5 @@
+#[cfg(target_arch = "aarch64")]
+use crate::kpm;
 use crate::module::{ScriptWait, handle_updated_modules, prune_modules};
 use crate::utils::is_safe_mode;
 use crate::{
@@ -8,6 +10,14 @@ use anyhow::{Context, Result};
 use log::{error, info, warn};
 use std::{path::Path, time::Instant};
 
+/// Run a built-in Zygisk boot step. A failure is logged, never propagated: a broken
+/// built-in Zygisk must not abort the module stage.
+fn builtin_zygisk_step(step: &str, action: impl FnOnce() -> Result<()>) {
+    if let Err(e) = action() {
+        warn!("built-in Zygisk {step} failed: {e}");
+    }
+}
+
 pub fn on_post_fs_data() -> Result<()> {
     if let Err(e) = ksucalls::ensure_uapi_version_matched() {
         error!("{e:#}, skip on_post_fs_data");
@@ -15,6 +25,11 @@ pub fn on_post_fs_data() -> Result<()> {
     }
 
     ksucalls::report_post_fs_data();
+
+    // Start before safe-mode/module early returns; expired leases survive reboot.
+    if let Err(e) = crate::temporary_root::start() {
+        error!("start temporary root watcher failed: {e:#}");
+    }
 
     utils::umask(0);
 
@@ -49,6 +64,8 @@ pub fn on_post_fs_data() -> Result<()> {
 
     assets::ensure_binaries(true).with_context(|| "Failed to extract bin assets")?;
 
+    crate::hot_install::clean_trash();
+
     // if we are in safe mode, we should disable all modules
     if safe_mode {
         warn!("safe mode, skip post-fs-data scripts and disable all modules!");
@@ -66,11 +83,11 @@ pub fn on_post_fs_data() -> Result<()> {
         warn!("prune modules failed: {e}");
     }
 
-    // Refresh /metadata/watchdog/ksu/modules.rc so the next boot's kernel hook sees the
+    // Refresh /metadata/watchdog/ksu/{modules.rc,preinit/} so the next boot's kernel hook sees the
     // current module set. Acts as a safety net when state was changed outside
     // of ksud's normal mutation commands.
-    if let Err(e) = crate::module::regenerate_preinit_rc() {
-        warn!("regenerate preinit rc failed: {e}");
+    if let Err(e) = crate::module::regenerate_preinit() {
+        warn!("regenerate preinit failed: {e:#}");
     }
 
     if let Err(e) = restorecon::restorecon() {
@@ -80,6 +97,10 @@ pub fn on_post_fs_data() -> Result<()> {
     // load sepolicy.rule
     if crate::module::load_sepolicy_rule().is_err() {
         warn!("load sepolicy.rule failed");
+    }
+
+    if let Err(e) = crate::builtin_zygisk::apply_sepolicy() {
+        warn!("apply builtin zygisk sepolicy failed: {e}");
     }
 
     if let Err(e) = crate::profile::apply_sepolies() {
@@ -95,6 +116,25 @@ pub fn on_post_fs_data() -> Result<()> {
         warn!("init features failed: {e}");
     }
 
+    crate::extension::init_forced_extensions();
+    if is_safe_mode() {
+        warn!("safe mode, skip load extension config");
+    } else if let Err(e) = crate::extension::init_extensions() {
+        warn!("init extensions failed: {e}");
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    if let Err(e) = kpm::booted_load() {
+        warn!("KPM: Failed to start KPM watcher: {e}");
+    }
+
+    // A disabled built-in kept its files for the rest of the session so a running
+    // monitor was not disturbed; this boot is where they go.
+    builtin_zygisk_step("cleanup", crate::builtin_zygisk::cleanup_disabled);
+
+    // bootstrap built-in zygisk before module post-fs-data
+    builtin_zygisk_step("bootstrap", crate::builtin_zygisk::bootstrap);
+
     // execute metamodule post-fs-data script first (priority)
     if let Err(e) = metamodule::exec_stage_script("post-fs-data", wait) {
         warn!("exec metamodule post-fs-data script failed: {e}");
@@ -103,6 +143,12 @@ pub fn on_post_fs_data() -> Result<()> {
     // exec modules post-fs-data scripts
     if let Err(e) = crate::module::exec_stage_script("post-fs-data", wait) {
         warn!("exec post-fs-data scripts failed: {e}");
+    }
+
+    // exec lua script on post-fs-data
+    #[cfg(all(target_os = "android", target_arch = "aarch64"))]
+    if let Err(e) = crate::module::exec_stage_lua("post-fs-data", true, "kernelsu") {
+        warn!("Failed to exec post-fs-data lua: {e}");
     }
 
     // load system.prop
@@ -153,6 +199,14 @@ pub fn run_stage(stage: &str, wait: ScriptWait) {
     if let Err(e) = crate::module::exec_stage_script(stage, wait) {
         warn!("Failed to exec {stage} scripts: {e}");
     }
+
+    // run lua stage script
+    #[cfg(all(target_os = "android", target_arch = "aarch64"))]
+    if let Err(e) =
+        crate::module::exec_stage_lua(stage, !matches!(wait, ScriptWait::NoWait), "kernelsu")
+    {
+        warn!("Failed to exec {stage} lua: {e}");
+    }
 }
 
 pub fn on_services() {
@@ -174,13 +228,11 @@ pub fn on_services() {
     }
 
     info!("on_services triggered!");
+    // Make sure the monitor survived post-fs-data, but do not talk to it: the zygote is
+    // being started right now, and a `ctl rearm` would race the fork injection it is
+    // already performing. The late attach belongs to boot completed.
+    builtin_zygisk_step("monitor", crate::builtin_zygisk::ensure_monitor);
     run_stage("service", ScriptWait::NoWait);
-    if crate::webui::autostart_enabled()
-        && !ksucalls::check_kernel_safemode()
-        && let Err(err) = crate::webui::start()
-    {
-        warn!("Failed to start web manager: {err:#}");
-    }
 }
 
 pub fn on_boot_completed() {
@@ -192,13 +244,14 @@ pub fn on_boot_completed() {
     ksucalls::report_boot_complete();
     info!("on_boot_completed triggered!");
 
+    // Safety net for a full boot: if the post-fs-data monitor never armed, start one
+    // and attach the zygote/system_server that are already running. Idempotent when
+    // the early boot already injected them.
+    builtin_zygisk_step("arm", crate::builtin_zygisk::ensure_armed);
+
+    crate::preinit::on_boot_completed();
+
     run_stage("boot-completed", ScriptWait::NoWait);
-    if let Err(error) = crate::stealth::start_if_hidden() {
-        warn!("Dialer recovery unavailable; restoring launcher: {error:#}");
-        if let Err(error) = crate::stealth::restore_launcher() {
-            warn!("Failed to restore Manager launcher: {error:#}");
-        }
-    }
 }
 
 fn catch_bootlog(logname: &str, command: &[&str]) -> Result<()> {

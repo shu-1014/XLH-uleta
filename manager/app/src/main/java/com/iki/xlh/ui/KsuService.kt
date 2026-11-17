@@ -1,5 +1,6 @@
 package com.iki.xlh.ui
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
@@ -7,7 +8,7 @@ import android.os.IBinder
 import android.os.UserManager
 import android.util.Log
 import com.topjohnwu.superuser.ipc.RootService
-import com.iki.xlh.IKsuInterface
+import com.iki.xlh.zako.IKsuInterface
 import rikka.parcelablelist.ParcelableListSlice
 
 /**
@@ -62,6 +63,7 @@ class KsuService : RootService() {
     }
 
     @Suppress("UNCHECKED_CAST")
+    @SuppressLint("PrivateApi")
     private fun getInstalledPackagesAsUser(flags: Int, userId: Int): List<PackageInfo> {
         return try {
             val pm: PackageManager = packageManager

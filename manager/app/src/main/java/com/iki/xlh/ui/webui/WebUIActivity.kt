@@ -2,6 +2,7 @@ package com.iki.xlh.ui.webui
 
 import android.annotation.SuppressLint
 import android.content.SharedPreferences
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import android.widget.Toast
@@ -37,7 +38,9 @@ class WebUIActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
 
         enableEdgeToEdge()
-        window.isNavigationBarContrastEnforced = false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
 
         super.onCreate(savedInstanceState)
@@ -75,7 +78,7 @@ class WebUIActivity : ComponentActivity() {
 
 @Composable
 private fun MainContent(activity: ComponentActivity, onFinish: () -> Unit) {
-    val moduleId = remember { activity.intent.data?.getQueryParameter("id") }
+    val moduleId = remember { activity.intent.data?.getQueryParameter("id") ?: activity.intent.getStringExtra("id") }
     val webUIState = remember { WebUIState() }
 
     LaunchedEffect(moduleId) {

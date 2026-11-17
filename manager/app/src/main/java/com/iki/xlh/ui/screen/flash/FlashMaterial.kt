@@ -10,7 +10,10 @@ import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.captionBar
 import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
@@ -20,6 +23,7 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Icon
@@ -63,7 +67,7 @@ fun FlashScreenMaterial(
         snackbarHost = {
             SnackBarHost(
                 hostState = snackBarHost,
-                modifier = Modifier.let { if (state.showRebootAction) it else it.safeDrawingPadding() })
+                modifier = Modifier.let { if (state.showRebootAction || state.showCloseAction) it else it.safeDrawingPadding() })
         },
         topBar = {
             TopAppBar(
@@ -90,16 +94,29 @@ fun FlashScreenMaterial(
             )
         },
         floatingActionButton = {
-            if (state.showRebootAction) {
-                SmallExtendedFloatingActionButton(
-                    onClick = actions.onReboot,
-                    icon = { Icon(Icons.Filled.Refresh, null) },
-                    text = { Text(stringResource(state.rebootLabelRes)) },
-                    modifier = Modifier.padding(
-                        bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
-                                WindowInsets.captionBar.asPaddingValues().calculateBottomPadding(),
+            when {
+                state.showRebootAction -> {
+                    SmallExtendedFloatingActionButton(
+                        onClick = actions.onReboot,
+                        icon = { Icon(Icons.Filled.Refresh, null) },
+                        text = { Text(stringResource(state.rebootLabelRes)) },
+                        modifier = Modifier.padding(
+                            bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
+                                    WindowInsets.captionBar.asPaddingValues().calculateBottomPadding(),
+                        )
                     )
-                )
+                }
+                state.showCloseAction -> {
+                    SmallExtendedFloatingActionButton(
+                        onClick = actions.onBack,
+                        icon = { Icon(Icons.Filled.Close, null) },
+                        text = { Text(stringResource(R.string.close)) },
+                        modifier = Modifier.padding(
+                            bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
+                                    WindowInsets.captionBar.asPaddingValues().calculateBottomPadding(),
+                        )
+                    )
+                }
             }
         },
         contentWindowInsets = WindowInsets.systemBars.add(WindowInsets.displayCutout).only(WindowInsetsSides.Horizontal)
@@ -124,12 +141,21 @@ fun FlashScreenMaterial(
                 scrollState.animateScrollTo(scrollState.maxValue)
             }
             Spacer(Modifier.height(innerPadding.calculateTopPadding()))
-            Text(
-                modifier = Modifier.padding(8.dp),
-                text = state.text,
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace,
-            )
+            Surface(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .fillMaxWidth(),
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            ) {
+                Text(
+                    modifier = Modifier.padding(16.dp),
+                    text = state.text,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
             Spacer(
                 Modifier.height(
                     16.dp + 54.dp + navBars.calculateBottomPadding() + captionBar.calculateBottomPadding()

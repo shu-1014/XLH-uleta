@@ -1,5 +1,6 @@
 package com.iki.xlh.ui.util
 
+import android.net.Uri
 import android.os.Parcel
 import android.os.Parcelable
 import kotlinx.serialization.KSerializer
@@ -8,11 +9,15 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import com.iki.xlh.ui.screen.flash.FlashIt
 import com.iki.xlh.ui.screen.modulerepo.RepoModuleArg
+import com.iki.xlh.ui.screen.scriptrun.ScriptRunArg
 import com.iki.xlh.ui.viewmodel.TemplateViewModel
 
 object FlashItSerializer : BaseParcelableSerializer<FlashIt>(FlashIt::class.java)
 object RepoModuleArgSerializer : BaseParcelableSerializer<RepoModuleArg>(RepoModuleArg::class.java)
+object ScriptRunArgSerializer : BaseParcelableSerializer<ScriptRunArg>(ScriptRunArg::class.java)
 object TemplateInfoSerializer : BaseParcelableSerializer<TemplateViewModel.TemplateInfo>(TemplateViewModel.TemplateInfo::class.java)
+
+object UriSerializer : BaseParcelableSerializer<Uri>(Uri::class.java)
 
 open class BaseParcelableSerializer<T : Parcelable>(
     private val clazz: Class<T>

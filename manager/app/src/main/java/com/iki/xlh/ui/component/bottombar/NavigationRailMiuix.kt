@@ -9,6 +9,8 @@ import com.iki.xlh.Natives
 import com.iki.xlh.R
 import com.iki.xlh.data.repository.SettingsRepositoryImpl
 import com.iki.xlh.ui.LocalMainPagerState
+import com.iki.xlh.ui.theme.backgroundAwareColor
+import com.iki.xlh.ui.util.customText
 import top.yukonga.miuix.kmp.basic.NavigationRail
 import top.yukonga.miuix.kmp.basic.NavigationRailItem
 import top.yukonga.miuix.kmp.basic.NavigationRailValue
@@ -26,7 +28,7 @@ fun NavigationRailMiuix(
     val mainState = LocalMainPagerState.current
 
     val items = BottomBarDestination.entries.map { destination ->
-        Pair(stringResource(destination.label), destination.icon)
+        Pair(customText(destination.textKey), destination.icon)
     }
     val settingsRepo = remember { SettingsRepositoryImpl() }
     val state = rememberNavigationRailState(
@@ -43,7 +45,7 @@ fun NavigationRailMiuix(
     NavigationRail(
         modifier = modifier,
         state = state,
-        color = MiuixTheme.colorScheme.surface,
+        color = backgroundAwareColor(MiuixTheme.colorScheme.surface),
         expandContentDescription = stringResource(R.string.nav_rail_expand),
         collapseContentDescription = stringResource(R.string.nav_rail_collapse),
     ) {

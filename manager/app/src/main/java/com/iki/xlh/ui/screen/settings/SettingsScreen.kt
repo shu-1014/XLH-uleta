@@ -1,13 +1,15 @@
 package com.iki.xlh.ui.screen.settings
 
+import androidx.activity.compose.LocalActivity
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.Dp
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -15,6 +17,8 @@ import com.iki.xlh.ui.LocalUiMode
 import com.iki.xlh.ui.UiMode
 import com.iki.xlh.ui.navigation3.Navigator
 import com.iki.xlh.ui.navigation3.Route
+import com.iki.xlh.ui.viewmodel.MainActivityViewModel
+import com.iki.xlh.ui.viewmodel.MainPagerConfig
 import com.iki.xlh.ui.viewmodel.SettingsViewModel
 
 @Composable
@@ -23,8 +27,19 @@ fun SettingPager(
     bottomInnerPadding: Dp,
     isCurrentPage: Boolean = true,
 ) {
+    val context = LocalContext.current
     val viewModel = viewModel<SettingsViewModel>()
+    val activityOwner = LocalActivity.current as? ViewModelStoreOwner
+    val mainViewModel: MainActivityViewModel = if (activityOwner != null) {
+        viewModel(viewModelStoreOwner = activityOwner)
+    } else {
+        viewModel()
+    }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val pageRequest by mainViewModel.pageRequest.collectAsStateWithLifecycle()
+    val sectionRequest = pageRequest?.takeIf {
+        it.page == MainPagerConfig.LAST_PAGE_INDEX && isCurrentPage
+    }
     val latestIsCurrentPage by rememberUpdatedState(isCurrentPage)
     val initialResumeHandled = rememberSaveable { mutableStateOf(false) }
 
@@ -42,31 +57,55 @@ fun SettingPager(
         onPauseOrDispose { }
     }
 
+
     val actions = SettingsScreenActions(
+        onSetCheckUpdate = viewModel::setCheckUpdate,
+        onSetCheckCiUpdate = viewModel::setCheckCiUpdate,
         onSetCheckModuleUpdate = viewModel::setCheckModuleUpdate,
-        onOpenTheme = { navigator.push(Route.ColorPalette) },
-        onOpenIkunSettings = { navigator.push(Route.IkunSettings) },
-        onOpenAssistant = { navigator.push(Route.Assistant) },
-        onOpenTools = { navigator.push(Route.Tool) },
+        onSetAutoDeleteModuleZip = viewModel::setAutoDeleteModuleZip,
+        onSetAutoDeleteUpdateApk = viewModel::setAutoDeleteUpdateApk,
+        onOpenTheme = { navigator.push(Route.ColorPalette()) },
+        onOpenThemeStore = { navigator.push(Route.ThemeStore()) },
         onSetUiModeIndex = { index ->
             viewModel.setUiMode(if (index == 0) UiMode.Miuix.value else UiMode.Material.value)
         },
         onOpenProfileTemplate = { navigator.push(Route.AppProfileTemplate) },
+        onSetLanguage = { tag -> viewModel.setLanguage(context, tag) },
         onSetSuCompatMode = viewModel::setSuCompatMode,
         onSetKernelUmountEnabled = viewModel::setKernelUmountEnabled,
         onSetSelinuxHideEnabled = viewModel::setSelinuxHideEnabled,
+        onSetAvcSpoofEnabled = viewModel::setAvcSpoofEnabled,
+        onSetMountHideEnabled = viewModel::setMountHideEnabled,
         onSetSulogEnabled = viewModel::setSulogEnabled,
         onSetAdbRootEnabled = viewModel::setAdbRootEnabled,
         onSetShellSuAdbOnlyEnabled = viewModel::setShellSuAdbOnlyEnabled,
         onSetDefaultUmountModules = viewModel::setDefaultUmountModules,
         onSetEnableWebDebugging = viewModel::setEnableWebDebugging,
         onSetAutoJailbreak = viewModel::setAutoJailbreak,
+        onSetBuiltinZygisk = viewModel::setBuiltinZygisk,
+        onDismissBuiltinZygiskFailure = viewModel::dismissBuiltinZygiskFailure,
         onSetUseSoftReboot = viewModel::setUseSoftReboot,
         onOpenAbout = { navigator.push(Route.About) },
+        onOpenTools = { navigator.push(Route.Tool) },
+        onOpenSusfsConfig = { navigator.push(Route.SuSFS()) },
+        onOpenExtensions = { navigator.push(Route.Extensions) },
+        onOpenBuiltinZygisk = { navigator.push(Route.BuiltinZygisk) },
     )
 
     when (LocalUiMode.current) {
-        UiMode.Miuix -> SettingPagerMiuix(uiState, actions, bottomInnerPadding)
-        UiMode.Material -> SettingPagerMaterial(uiState, actions, bottomInnerPadding)
+        UiMode.Miuix -> SettingPagerMiuix(
+            uiState = uiState,
+            actions = actions,
+            bottomInnerPadding = bottomInnerPadding,
+            sectionRequest = sectionRequest,
+            onSectionConsumed = { token -> mainViewModel.consumePageRequest(token) },
+        )
+        UiMode.Material -> SettingPagerMaterial(
+            uiState = uiState,
+            actions = actions,
+            bottomInnerPadding = bottomInnerPadding,
+            sectionRequest = sectionRequest,
+            onSectionConsumed = { token -> mainViewModel.consumePageRequest(token) },
+        )
     }
 }

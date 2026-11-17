@@ -6,14 +6,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.ui.unit.Dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.iki.xlh.ui.component.SearchStatus
 import com.iki.xlh.ui.LocalUiMode
 import com.iki.xlh.ui.UiMode
+import com.iki.xlh.ui.component.SearchStatus
 import com.iki.xlh.ui.navigation3.Navigator
 import com.iki.xlh.ui.navigation3.Route
 import com.iki.xlh.ui.viewmodel.SuperUserViewModel

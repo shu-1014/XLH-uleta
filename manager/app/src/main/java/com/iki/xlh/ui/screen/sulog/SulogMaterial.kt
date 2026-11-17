@@ -23,6 +23,8 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import com.iki.xlh.ui.util.customText
+import com.iki.xlh.ui.util.CustomTextKey
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -110,7 +112,7 @@ fun SulogScreenMaterial(
         topBar = {
             SearchAppBar(
                 snackbarHostState = snackbarHostState,
-                title = { Text(stringResource(R.string.settings_sulog)) },
+                title = { Text(customText(CustomTextKey.PAGE_SULOG)) },
                 searchText = localSearchText,
                 onSearchTextChange = {
                     localSearchText = it
@@ -298,6 +300,7 @@ private fun LazyListScope.sulogEntriesSection(
                                     Text(
                                         it,
                                         style = typography.bodySmall,
+                                        fontFamily = FontFamily.Monospace,
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
                                     )

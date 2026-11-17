@@ -27,8 +27,13 @@ on:
         required: false
         default: ''
         type: string
-      ksu_version:
-        description: 'pin KSU_VERSION so it matches the manager versionCode (optional)'
+      release_build:
+        description: 'Mark version metadata as a release build'
+        required: false
+        default: false
+        type: boolean
+      version_code:
+        description: 'Consistent KernelSU version code for all module builds'
         required: false
         default: ''
         type: string
@@ -43,16 +48,17 @@ jobs:
 
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v7
+      uses: actions/checkout@v6
 
     - name: Build kernelsu.ko
       env:
         PACKAGE_NAME: ${{ inputs.package_name }}
         EXPECTED_SIZE: ${{ inputs.expected_size }}
         EXPECTED_HASH: ${{ inputs.expected_hash }}
+        KSU_VERSION_CODE: ${{ inputs.version_code }}
+        RELEASE_BUILD: ${{ inputs.release_build }}
       run: |
-        git config --global --add safe.directory /__w/KernelSU/KernelSU
-
+        git config --global --add safe.directory /__w/SukiSU-Nova/SukiSU-Nova
         cd kernel
 
         echo "=== Building kernelsu.ko for KMI: ${{ inputs.kmi }} ==="
@@ -67,13 +73,16 @@ jobs:
         if [ -n "$EXPECTED_HASH" ]; then
           EXTRA_ARGS="$EXTRA_ARGS KSU_EXPECTED_HASH=$EXPECTED_HASH"
         fi
+        if [ -n "$KSU_VERSION_CODE" ]; then
+          EXTRA_ARGS="$EXTRA_ARGS KSU_VERSION=$KSU_VERSION_CODE"
+        fi
+        if [ "$RELEASE_BUILD" = "true" ]; then
+          EXTRA_ARGS="$EXTRA_ARGS KSU_BUILD_REF=release"
+        fi
         if [ "${{ github.event_name }}" = "pull_request" ]; then
           EXTRA_ARGS="$EXTRA_ARGS KSU_IS_PR_BUILD=1"
         fi
-        if [ -n "${{ inputs.ksu_version }}" ]; then
-          EXTRA_ARGS="$EXTRA_ARGS KSU_VERSION_OVERRIDE=${{ inputs.ksu_version }}"
-        fi
-        CONFIG_KSU=m CC=clang make $EXTRA_ARGS
+        CONFIG_KSU=m CONFIG_KPM=y CC=clang make $EXTRA_ARGS
         
         echo "=== Build completed ==="
 
@@ -102,6 +111,8 @@ jobs:
         PACKAGE_NAME: ${{ inputs.package_name }}
         EXPECTED_SIZE: ${{ inputs.expected_size }}
         EXPECTED_HASH: ${{ inputs.expected_hash }}
+        KSU_VERSION_CODE: ${{ inputs.version_code }}
+        RELEASE_BUILD: ${{ inputs.release_build }}
       run: |
         cd kernel
         make clean
@@ -147,11 +158,14 @@ jobs:
         if [ -n "$EXPECTED_HASH" ]; then
           EXTRA_ARGS="$EXTRA_ARGS KSU_EXPECTED_HASH=$EXPECTED_HASH"
         fi
+        if [ -n "$KSU_VERSION_CODE" ]; then
+          EXTRA_ARGS="$EXTRA_ARGS KSU_VERSION=$KSU_VERSION_CODE"
+        fi
+        if [ "$RELEASE_BUILD" = "true" ]; then
+          EXTRA_ARGS="$EXTRA_ARGS KSU_BUILD_REF=release"
+        fi
         if [ "${{ github.event_name }}" = "pull_request" ]; then
           EXTRA_ARGS="$EXTRA_ARGS KSU_IS_PR_BUILD=1"
-        fi
-        if [ -n "${{ inputs.ksu_version }}" ]; then
-          EXTRA_ARGS="$EXTRA_ARGS KSU_VERSION_OVERRIDE=${{ inputs.ksu_version }}"
         fi
         
         MDIR=$(realpath .)

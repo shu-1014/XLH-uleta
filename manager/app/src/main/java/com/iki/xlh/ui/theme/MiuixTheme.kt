@@ -1,6 +1,7 @@
 package com.iki.xlh.ui.theme
 
 import android.app.Activity
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -44,9 +45,12 @@ fun MiuixKernelSUTheme(
 
     val resolvedKeyColor: Color? = when {
         appSettings.keyColor != 0 -> Color(appSettings.keyColor)
-        appSettings.colorMode.isMonet ->
+        appSettings.colorMode.isMonet && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
             if (darkTheme) dynamicDarkColorScheme(context).primary
             else dynamicLightColorScheme(context).primary
+
+        // No system dynamic colors before Android 12.
+        appSettings.colorMode.isMonet -> FallbackSeedColor
 
         else -> null
     }
@@ -76,11 +80,34 @@ fun MiuixKernelSUTheme(
                     isAppearanceLightNavigationBars = !darkTheme
                 }
             }
-            MonetColorsProvider.UpdateCss()
-            CompositionLocalProvider(
-                LocalContentColor provides MiuixTheme.colorScheme.onBackground,
-            ) {
-                content()
+            val baseColors = MiuixTheme.colorScheme
+            val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
+            // Miuix mutes disabled text to ~38% alpha. Over a translucent card on top of a
+            // custom background that is barely legible, so keep the disabled look but raise
+            // the contrast.
+            //
+            // Always hand a fresh Colors instance to the nested theme. MiuixTheme() copies into
+            // a remembered Colors object and a remembered snapshot here would keep the palette
+            // from before a light/dark, key color or monet change (until the app is restarted).
+            val readableColors = if (hasCustomBackground) {
+                baseColors.copy(
+                    disabledOnSurface = baseColors.onSurface.copy(alpha = 0.85f),
+                    disabledOnSecondary = baseColors.onSecondary.copy(alpha = 0.85f),
+                    disabledOnSecondaryVariant = baseColors.onSurface.copy(alpha = 0.85f),
+                )
+            } else {
+                baseColors.copy()
+            }
+            // Overlay after the background-aware contrast tweak: an explicit theme/user colour
+            // always wins. The tokens are resolved once per theme change, not per frame.
+            val overlaidColors = readableColors.withAppearance(appSettings.appearance?.colorsFor(darkTheme))
+            MiuixTheme(overlaidColors) {
+                MonetColorsProvider.UpdateCss()
+                CompositionLocalProvider(
+                    LocalContentColor provides MiuixTheme.colorScheme.onBackground,
+                ) {
+                    content()
+                }
             }
         }
     )

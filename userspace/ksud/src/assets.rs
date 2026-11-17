@@ -14,13 +14,23 @@ mod android {
 
     pub fn ensure_binaries(ignore_if_exist: bool) -> anyhow::Result<()> {
         for file in Asset::iter() {
-            if file == "ksuinit" || file == "waitsys" || file.ends_with(".ko") {
-                // don't extract internal executables and kernel modules
+            if file == "ksuinit"
+                || file == "waitsys"
+                || file.ends_with(".ko")
+                || file.starts_with("zygisk")
+                || file.starts_with("libzygisk")
+            {
+                // don't extract internal executables, kernel modules, and built-in zygisk assets
+                continue;
+            }
+            let path = std::path::PathBuf::from(format!("{BINARY_DIR}{file}"));
+            // Match ensure_binary's exists semantics before fetching/decompressing the asset.
+            if ignore_if_exist && path.exists() {
                 continue;
             }
             let asset =
                 Asset::get(&file).ok_or_else(|| anyhow::anyhow!("asset not found: {file}"))?;
-            ensure_binary(format!("{BINARY_DIR}{file}"), &asset.data, ignore_if_exist)?;
+            ensure_binary(path, &asset.data, ignore_if_exist)?;
         }
 
         // Create resetprop -> ksud symlink (resetprop is now built into ksud)
@@ -35,14 +45,19 @@ mod android {
 #[cfg(target_os = "android")]
 pub use android::*;
 
-#[cfg(all(target_arch = "x86_64", target_os = "android"))]
-#[derive(RustEmbed)]
-#[folder = "bin/x86_64"]
-struct Asset;
-
 #[cfg(all(target_arch = "aarch64", target_os = "android"))]
 #[derive(RustEmbed)]
 #[folder = "bin/aarch64"]
+struct Asset;
+
+#[cfg(all(target_arch = "arm", target_os = "android"))]
+#[derive(RustEmbed)]
+#[folder = "bin/arm"]
+struct Asset;
+
+#[cfg(all(target_arch = "x86_64", target_os = "android"))]
+#[derive(RustEmbed)]
+#[folder = "bin/x86_64"]
 struct Asset;
 
 #[cfg(all(target_arch = "riscv64", target_os = "android"))]
@@ -50,7 +65,7 @@ struct Asset;
 #[folder = "bin/riscv64"]
 struct Asset;
 
-// If not Android, ie. macos, linux, windows, include all architectures.
+// If not Android, ie. macos, linux, windows, include both
 #[cfg(not(target_os = "android"))]
 #[derive(RustEmbed)]
 #[folder = "bin"]

@@ -50,8 +50,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -68,6 +66,9 @@ import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import com.iki.xlh.ui.component.SearchStatus
+import com.iki.xlh.ui.theme.LocalBackgroundImagePath
+import com.iki.xlh.ui.theme.LocalCardBackgroundAlpha
+import com.iki.xlh.ui.theme.backgroundAwareColor
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.InputField
 import top.yukonga.miuix.kmp.basic.Text
@@ -76,7 +77,7 @@ import top.yukonga.miuix.kmp.icon.basic.Search
 import top.yukonga.miuix.kmp.icon.basic.SearchCleanup
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 
-/** Like `padding(top = …)` but reads [top] in the layout phase, so a frame-rate value relayouts instead of recomposing. */
+
 internal fun Modifier.deferredTopPadding(top: () -> Dp): Modifier = layout { measurable, constraints ->
     val topPx = top().roundToPx().coerceAtLeast(0)
     val placeable = measurable.measure(
@@ -130,8 +131,10 @@ fun SearchStatus.SearchPager(
     ) {
         onSearchStatusChange(searchStatus.onAnimationComplete())
     }
+    val hasBackgroundImage = LocalBackgroundImagePath.current.isNotEmpty()
+    val cardAlpha = LocalCardBackgroundAlpha.current
     val surfaceAlpha by animateFloatAsState(
-        if (searchStatus.shouldExpand()) 1f else 0f,
+        if (searchStatus.shouldExpand()) if (hasBackgroundImage) cardAlpha else 1f else 0f,
         animationSpec = tween(200, easing = FastOutSlowInEasing),
         label = "SearchPagerSurfaceAlpha"
     )
@@ -142,7 +145,6 @@ fun SearchStatus.SearchPager(
             .fillMaxSize()
             .zIndex(5f)
             .drawBehind { drawRect(surfaceColor.copy(alpha = surfaceAlpha)) }
-            .semantics { onClick { false } }
             .then(
                 if (!searchStatus.isCollapsed()) {
                     Modifier
@@ -161,8 +163,10 @@ fun SearchStatus.SearchPager(
                 .fillMaxWidth()
                 .padding(top = topPadding)
                 .then(
-                    if (!searchStatus.isCollapsed()) Modifier.background(colorScheme.surface)
-                    else Modifier
+                    if (!searchStatus.isCollapsed()) {
+                        if (hasBackgroundImage) Modifier.background(surfaceColor.copy(alpha = cardAlpha))
+                        else Modifier.background(surfaceColor)
+                    } else Modifier
                 ),
             horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically,
@@ -171,7 +175,7 @@ fun SearchStatus.SearchPager(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .background(colorScheme.surface)
+                        .background(if (hasBackgroundImage) surfaceColor.copy(alpha = cardAlpha) else surfaceColor)
                 ) {
                     expandBar(searchStatus, onSearchStatusChange, searchBarTopPadding)
                 }
@@ -269,7 +273,7 @@ fun SearchBar(
             .padding(horizontal = 12.dp)
             .padding(top = searchBarTopPadding, bottom = 6.dp)
             .heightIn(min = 45.dp)
-            .background(colorScheme.surfaceContainerHigh, CircleShape)
+            .background(backgroundAwareColor(colorScheme.surfaceContainerHigh), CircleShape)
             .focusRequester(focusRequester),
         decorationBox = { innerTextField ->
             Row(
@@ -342,6 +346,7 @@ fun SearchBarFake(
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
             .padding(top = searchBarTopPadding, bottom = 6.dp),
+        color = backgroundAwareColor(colorScheme.surfaceContainerHigh),
         onSearch = { },
         enabled = false,
         expanded = false,

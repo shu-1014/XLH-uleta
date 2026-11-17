@@ -1,18 +1,18 @@
 package com.iki.xlh.data.registry
 
-/** How an `updateJson` update of an installed module is downloaded and verified. */
+
 sealed interface UpdateVerification {
-    /** Not a registry update: download as before, without registry checks. */
+    
     data object Legacy : UpdateVerification
 
-    /** The update is a registry release: enforce its URL allowlist, size and SHA-256. */
+    
     data class Registry(
         val zipUrl: String,
         val expected: ExpectedFile,
         val release: ApiRelease,
     ) : UpdateVerification
 
-    /** It claims to come from the registry but cannot be matched to a registry release. */
+    
     data class Rejected(val reason: String) : UpdateVerification
 }
 
@@ -38,8 +38,8 @@ object RegistryUpdatePolicy {
         registryBaseUrl: String,
         updateJsonUrl: String,
         zipUrl: String,
-        versionCode: Int,
-        /** null when the index could not be loaded at all. */
+        versionCode: Long,
+        
         inIndex: Boolean?,
         detail: ApiModuleDetail?,
     ): UpdateVerification {
@@ -52,7 +52,7 @@ object RegistryUpdatePolicy {
         val candidates = detail?.releases.orEmpty()
             .filter { sameUrl(it.zip.url, zipUrl) && RegistryUrls.isAllowedReleaseDownloadUrl(it.zip.url) }
         if (candidates.isNotEmpty()) {
-            val release = candidates.firstOrNull { it.versionCode == versionCode }
+            val release = candidates.firstOrNull { it.versionCode.toLong() == versionCode }
                 ?: return UpdateVerification.Rejected("versionCode does not match the registry release")
             return UpdateVerification.Registry(
                 zipUrl = release.zip.url,
@@ -77,7 +77,7 @@ object RegistryUpdatePolicy {
     fun isUnrelatedToRegistry(registryBaseUrl: String, updateJsonUrl: String, zipUrl: String): Boolean =
         !RegistryUrls.isSameOrigin(updateJsonUrl, registryBaseUrl) && RegistryUrls.hostOf(zipUrl.trim()) != "github.com"
 
-    /** URL equality with a case-insensitive scheme/host; path and query must match exactly. */
+    
     fun sameUrl(a: String, b: String): Boolean {
         if (a == b) return true
         val ua = runCatching { java.net.URI(a.trim()) }.getOrNull() ?: return false

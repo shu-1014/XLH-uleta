@@ -64,6 +64,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.stringResource
+import com.iki.xlh.ui.util.customText
+import com.iki.xlh.ui.util.CustomTextKey
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -82,19 +84,23 @@ import com.iki.xlh.ui.component.SearchStatus
 import com.iki.xlh.ui.component.dialog.ConfirmDialogHandle
 import com.iki.xlh.ui.component.dialog.rememberConfirmDialog
 import com.iki.xlh.ui.component.markdown.GithubMarkdown
+import com.iki.xlh.ui.component.miuix.AppCard
+import com.iki.xlh.ui.component.miuix.AppScaffold
 import com.iki.xlh.ui.component.miuix.SearchBarFake
 import com.iki.xlh.ui.component.miuix.SearchBox
 import com.iki.xlh.ui.component.miuix.SearchPager
 import com.iki.xlh.ui.component.miuix.deferredTopPadding
 import com.iki.xlh.ui.screen.module.ExpandableDescriptionText
+import com.iki.xlh.ui.screen.scriptrun.lastRunText
+import com.iki.xlh.ui.theme.LocalBackgroundImagePath
 import com.iki.xlh.ui.theme.LocalEnableBlur
 import com.iki.xlh.ui.theme.LocalModuleDescriptionMaxLines
+import com.iki.xlh.ui.theme.backgroundAwareColor
 import com.iki.xlh.ui.theme.isInDarkTheme
 import com.iki.xlh.ui.util.BlurredBar
 import com.iki.xlh.ui.util.isDownloadAvailable
 import com.iki.xlh.ui.util.rememberBlurBackdrop
 import com.iki.xlh.ui.util.rememberContentReady
-import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
@@ -106,7 +112,6 @@ import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.PullToRefresh
 import top.yukonga.miuix.kmp.basic.RefreshState
-import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.TabRow
@@ -122,6 +127,7 @@ import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.FileDownloads
 import top.yukonga.miuix.kmp.icon.extended.HorizontalSplit
 import top.yukonga.miuix.kmp.icon.extended.Link
+import top.yukonga.miuix.kmp.icon.extended.Play
 import top.yukonga.miuix.kmp.icon.extended.Sort
 import top.yukonga.miuix.kmp.icon.extended.TopDownloads
 import top.yukonga.miuix.kmp.overlay.OverlayListPopup
@@ -153,15 +159,16 @@ fun ModuleRepoScreenMiuix(
     val enableBlur = LocalEnableBlur.current
     val backdrop = rememberBlurBackdrop(enableBlur)
     val blurActive = backdrop != null
-    val barColor = if (blurActive) Color.Transparent else colorScheme.surface
+    val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
+    val barColor = if (blurActive || hasCustomBackground) Color.Transparent else colorScheme.surface
 
-    Scaffold(
+    AppScaffold(
         topBar = {
             BlurredBar(backdrop) {
                 searchStatus.TopAppBarAnim(backgroundColor = barColor) {
                     TopAppBar(
                         color = barColor,
-                        title = stringResource(R.string.module_repos),
+                        title = customText(CustomTextKey.PAGE_MODULE_REPO),
                         actions = {
                             val showSortPopup = remember { mutableStateOf(false) }
                             OverlayListPopup(
@@ -260,7 +267,7 @@ fun ModuleRepoScreenMiuix(
                         Spacer(Modifier.height(6.dp))
                     }
                     items(state.searchResults, key = { it.moduleId }, contentType = { "module" }) { module ->
-                        Card(
+                        AppCard(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 12.dp)
@@ -291,10 +298,8 @@ fun ModuleRepoScreenMiuix(
                                             )
                                             RepoBadgesMiuix(
                                                 metamodule = module.metamodule,
-                                                installState = repoInstallState(
-                                                    state.installedVersions[module.moduleId],
-                                                    module.latestVersionCode
-                                                ),
+                                                isScript = module.isScript,
+                                                installState = repoInstallStateOf(module, state.installedVersions),
                                             )
                                         }
                                         RepoStarsMiuix(module.stars, Modifier.padding(start = 8.dp))
@@ -426,7 +431,7 @@ fun ModuleRepoScreenMiuix(
                             items(items = state.modules, key = { it.moduleId }, contentType = { "module" }) { module ->
                                 val moduleAuthor = stringResource(id = R.string.module_author)
 
-                                Card(
+                                AppCard(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 12.dp)
@@ -449,10 +454,8 @@ fun ModuleRepoScreenMiuix(
                                                 )
                                                 RepoBadgesMiuix(
                                                     metamodule = module.metamodule,
-                                                    installState = repoInstallState(
-                                                        state.installedVersions[module.moduleId],
-                                                        module.latestVersionCode
-                                                    ),
+                                                    isScript = module.isScript,
+                                                    installState = repoInstallStateOf(module, state.installedVersions),
                                                 )
                                             }
                                         }
@@ -546,7 +549,7 @@ private fun RepoSummaryText(module: RepoModule, onModuleClick: () -> Unit) {
     )
 }
 
-/** Star icon + compact count; nothing when the count is unknown or 0. */
+
 @Composable
 private fun RepoStarsMiuix(stars: Int?, modifier: Modifier = Modifier) {
     if (stars == null || stars <= 0) return
@@ -585,11 +588,19 @@ private fun MiuixTag(text: String, background: Color, tint: Color) {
 @Composable
 private fun RepoBadgesMiuix(
     metamodule: Boolean,
+    isScript: Boolean,
     installState: RepoInstallState,
 ) {
     if (metamodule) {
         MiuixTag(
             text = "META",
+            background = colorScheme.tertiaryContainer.copy(alpha = 0.6f),
+            tint = colorScheme.onTertiaryContainer.copy(alpha = 0.8f),
+        )
+    }
+    if (isScript) {
+        MiuixTag(
+            text = stringResource(R.string.module_repo_script_badge),
             background = colorScheme.tertiaryContainer.copy(alpha = 0.6f),
             tint = colorScheme.onTertiaryContainer.copy(alpha = 0.8f),
         )
@@ -611,7 +622,7 @@ private fun RepoBadgesMiuix(
     }
 }
 
-/** Loading / not-in-index / failure placeholder; returns true when the page content can be shown. */
+
 @Composable
 private fun LazyItemScope.detailStatusMiuix(state: ModuleRepoDetailUiState, onRetry: () -> Unit): Boolean {
     when {
@@ -661,7 +672,7 @@ private fun LazyItemScope.detailStatusMiuix(state: ModuleRepoDetailUiState, onRe
     return false
 }
 
-/** The detail is the last good cached copy because it could not be refreshed. */
+
 @Composable
 private fun CachedDetailNoticeMiuix(modifier: Modifier = Modifier) {
     Text(
@@ -823,7 +834,7 @@ fun ReleasesPage(
                 }
             }
             items(items = detail.releases, key = { "release_${it.tag}" }, contentType = { "release" }) { rel ->
-                Card(
+                AppCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp)
@@ -914,6 +925,7 @@ fun ReleasesPage(
                         ReleaseZipRowMiuix(
                             release = rel,
                             canInstall = state.canInstall,
+                            isScript = state.isScript,
                             actionIconTint = actionIconTint,
                             secondaryContainer = secondaryContainer,
                             confirmTitle = confirmTitle,
@@ -946,6 +958,7 @@ fun ReleasesPage(
 private fun ReleaseZipRowMiuix(
     release: RepoRelease,
     canInstall: Boolean,
+    isScript: Boolean,
     actionIconTint: Color,
     secondaryContainer: Color,
     confirmTitle: String,
@@ -1006,7 +1019,7 @@ private fun ReleaseZipRowMiuix(
                         if (isDownloadAvailable(downloadedUri)) {
                             onInstallModule(downloadedUri)
                         } else {
-                            handle.downloadedUri = null
+                            handle.setDownloaded(null)
                         }
                     }
                 } else {
@@ -1019,14 +1032,20 @@ private fun ReleaseZipRowMiuix(
                     progress = handle.progress / 100f, size = 20.dp, strokeWidth = 2.dp
                 )
             } else {
-                val label = stringResource(if (downloadedUri != null) R.string.install else R.string.download)
+                val label = stringResource(
+                    when {
+                        downloadedUri == null -> R.string.download
+                        isScript -> R.string.script_run
+                        else -> R.string.install
+                    }
+                )
                 Row(
                     modifier = Modifier.padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
                         modifier = Modifier.size(20.dp),
-                        imageVector = MiuixIcons.FileDownloads,
+                        imageVector = if (downloadedUri != null && isScript) MiuixIcons.Play else MiuixIcons.FileDownloads,
                         tint = actionIconTint,
                         contentDescription = label
                     )
@@ -1091,7 +1110,7 @@ private fun InfoRowMiuix(
 private fun InfoCardMiuix(title: String, rows: List<@Composable () -> Unit>) {
     if (rows.isEmpty()) return
     SmallTitle(text = title, modifier = Modifier.padding(top = 6.dp))
-    Card(
+    AppCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
@@ -1148,6 +1167,13 @@ fun InfoPage(
                             text = stringResource(R.string.module_repo_not_in_index),
                             fontSize = 14.sp,
                             color = colorScheme.error,
+                        )
+                    }
+                    if (state.isScript) {
+                        Text(
+                            text = lastRunText(LocalContext.current, state.lastRun),
+                            fontSize = 14.sp,
+                            color = colorScheme.onSurfaceVariantSummary,
                         )
                     }
                     if (detail?.healthStale == true) {
@@ -1276,7 +1302,7 @@ fun ModuleRepoDetailScreenMiuix(
     val secondaryContainer = colorScheme.secondaryContainer.copy(alpha = 0.8f)
     val module = state.module
     val scope = rememberCoroutineScope()
-    val confirmTitle = stringResource(R.string.module_install)
+    val confirmTitle = stringResource(if (state.isScript) R.string.script_run_title else R.string.module_install)
     var pendingDownload by remember { mutableStateOf<(() -> Unit)?>(null) }
     val confirmDialog = rememberConfirmDialog(onConfirm = { pendingDownload?.invoke() })
 
@@ -1284,7 +1310,8 @@ fun ModuleRepoDetailScreenMiuix(
 
     val backdrop = rememberBlurBackdrop(enableBlur)
     val blurActive = backdrop != null
-    val detailBarColor = if (blurActive) Color.Transparent else colorScheme.surface
+    val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
+    val detailBarColor = if (blurActive || hasCustomBackground) Color.Transparent else colorScheme.surface
 
     val tabs = listOf(
         stringResource(R.string.tab_readme), stringResource(R.string.tab_releases), stringResource(R.string.tab_info)
@@ -1296,7 +1323,7 @@ fun ModuleRepoDetailScreenMiuix(
     }
     val coroutineScope = rememberCoroutineScope()
 
-    Scaffold(
+    AppScaffold(
         topBar = {
             BlurredBar(backdrop) {
                 TopAppBar(
@@ -1343,7 +1370,8 @@ fun ModuleRepoDetailScreenMiuix(
                                     }
                                 },
                                 colors = TabRowDefaults.tabRowColors(
-                                    backgroundColor = if (blurActive) Color.Transparent else colorScheme.surface
+                                    backgroundColor = if (blurActive || hasCustomBackground) Color.Transparent else colorScheme.surface,
+                                    selectedBackgroundColor = backgroundAwareColor(colorScheme.surfaceContainer),
                                 ),
                                 height = tabRowHeight,
                             )

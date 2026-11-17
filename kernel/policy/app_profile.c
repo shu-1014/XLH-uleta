@@ -11,6 +11,8 @@
 #include <linux/thread_info.h>
 #include <linux/uidgid.h>
 #include <linux/version.h>
+#include <linux/tty.h>
+#include "objsec.h"
 
 #include "policy/allowlist.h"
 #include "policy/app_profile.h"

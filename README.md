@@ -1,183 +1,286 @@
-# 🐾星棱狐🐾 LKM Builder
+# 🐾星棱狐🐾 — 安卓 Root 管理器（二次开发版）
 
-这个仓库有两个 workflow：
-
-| Workflow | 作用 | 用哪个 |
-| --- | --- | --- |
-| **一体构建管理器《U》** | 编 `kernelsu.ko` → 内嵌进 ksud → 打包成**装完即用的管理器 APK** | ⭐ 推荐 |
-| **Build 星棱狐 LKM** | 只编 `kernelsu.ko`，给已有的管理器用 | 想单独换模块时 |
-
-两个都需要先配签名密钥（见下面「一次性配置」）。
+包名：`com.iki.xlh`
+展示名：`🐾星棱狐🐾`
 
 ---
 
-## 为什么必须自己编译
+## 1. 这份东西是怎么来的
 
-内核判定"谁是管理器"要求**两个条件同时成立**（`kernel/manager/throne_tracker.c`）：
-
-```c
-strncmp(np->package, package, KSU_MAX_PACKAGE_NAME) == 0   // 包名匹配
-check_v2_signature(path, EXPECTED_SIZE, EXPECTED_HASH)     // 证书匹配
-```
-
-官方发布页那 16 个现成的 `lkm-*.ko` 里写的是上游的 `me.weishu.kernelsu`
-和上游证书哈希。它们能加载、能开机，但**永远不会把 root 交给你的管理器**。
-
-这个仓库的 `kernel/Kbuild` 已经改成你的身份：
-
-```make
-KSU_PACKAGE_NAME  ?= com.iki.xlh
-KSU_EXPECTED_SIZE ?= 0x033b
-KSU_EXPECTED_HASH ?= ff7d77b3f5ee160dfcac5ff8a42d7a31eb825b2d88f83017b8323dd51c6c3b8d
-```
-
----
-
-## 一次性配置：签名密钥
-
-**为什么必须配**：APK 的签名证书哈希被烧进了内核（`KSU_EXPECTED_HASH`）。
-如果 CI 用别的密钥签名，内核就不认这个管理器 —— 和用官方 LKM 一样白搭。
-
-到 **Settings → Secrets and variables → Actions → New repository secret** 添加 4 个：
-
-| Secret 名称 | 值 |
+| 项目 | 说明 |
 | --- | --- |
-| `KEYSTORE` | `.jks` 文件的 base64 |
-| `KEYSTORE_PASSWORD` | 密钥库口令 |
-| `KEY_ALIAS` | 别名（`xinglinghu-key`） |
-| `KEY_PASSWORD` | 私钥口令 |
+| 底座源码 | [`SukiSU-Ultra/SukiSU-Ultra`](https://github.com/SukiSU-Ultra/SukiSU-Ultra)（KernelSU 分支，完整内核 + 用户态 + 管理器） |
+| 形态参考 | MapleSU 的双底层 / 无痕 / TEE / 一键迁移「一体化管理器」思路 |
+| 本仓库 | 重新命名的 `StarFoxManager`，包名 `com.iki.xlh`，展示名 `🐾星棱狐🐾` |
 
-生成 base64（在你自己的机器上跑，**不要**把它贴到任何公开地方）：
-
-```powershell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes('C:\ksu-build\xinglinghu-release.jks')) | Set-Clipboard
-```
-
-> ⚠️ **密钥口令曾经泄露过一次。** 早期提交里 `manager/gradle.properties`
-> 带着明文口令被推到了公开仓库（现已彻底清除并重建仓库）。
-> **请务必改掉口令** —— 改口令**不会改变证书**，所以 `KSU_EXPECTED_HASH` 依然有效，
-> 不需要重新编译任何东西。把下面的 `旧口令` 换成你手里的原口令：
->
-> ```powershell
-> keytool -storepasswd -keystore C:\ksu-build\xinglinghu-release.jks `
->   -storepass 旧口令 -new 你的新口令
-> keytool -keypasswd -alias xinglinghu-key -keystore C:\ksu-build\xinglinghu-release.jks `
->   -storepass 你的新口令 -keypass 旧口令 -new 你的新口令
-> ```
->
-> 改完之后，本机 `manager/gradle.properties` 与 GitHub 的 `KEYSTORE_PASSWORD`、
-> `KEY_PASSWORD` 两个 Secret 都要同步成新口令。
+> 说明：MapleSU 的管理器源码目前只在 Telegram 内测渠道发 APK，GitHub 上公开的是它的模块（`TEESimulator-MapleSU`）和模块市场。所以这里用**能力等价**的开源底座 SukiSU 来做，把它当成 MapleSU 那一套的完全开源替代：内核层 SU、模块生态、SUSFS 隐藏、KPM、Zygisk、App Profile 全都在。
 
 ---
 
-## 用法一：一体构建管理器《U》（推荐）
+## 2. 改了什么
 
-**Actions** → 左侧 **一体构建管理器《U》** → **Run workflow**。
+### 2.1 品牌层
+- 包名 `com.sukisu.nova` → `com.iki.xlh`（548 个文件全量替换，含 `aidl`、`build.gradle.kts`、`proguard`、`namespace`）
+- `applicationId` / `namespace`：`com.iki.xlh`
+- 展示名：`🐾星棱狐🐾`（`resValue("string","app_name", …)`）
+- AI 子模块包：`com.sukisu.ultra.ai.api` → `com.iki.xlh.ai.api`
+- AIDL 包：`com.sukisu.zako` → `com.iki.xlh.zako`
+- 用户可见文案 `SukiSU` → `星棱狐`
 
-| 参数 | 默认值 | 说明 |
+### 2.2 新增「星棱狐增强中心」
+新包 `com.iki.xlh.starfox` + 界面 `ui/screen/starfox/StarFoxScreen.kt`，从 **设置 → 工具** 进入：
+
+| 功能 | 落地方式 |
+| --- | --- |
+| **双底层模式** KSU / Ultra | 写 `/data/adb/xlh/mode`，内核补丁启动时读取；Ultra 默认带开无痕 |
+| **无痕模式** | `/data/adb/xlh/stealth`，过滤挂载痕迹 |
+| **TEE 模拟兼容层** | 开关同时启用/禁用 `/data/adb/modules/TEESimulator` |
+| **模块生态兼容 Zygisk** | `/data/adb/xlh/zygisk` |
+| **内核 Panic 加固** | `/data/adb/xlh/panic` |
+| **一键迁移** | 扫 `/data/adb/{ksu,magisk,ap,skroot}`，备份授权数据到 `/data/adb/xlh/migrate-*` |
+| **寄生 / WebUI 管理器** | `/data/adb/xlh/webui` + `webui.port` |
+
+配置全部收在 `/data/adb/xlh`，**不动** `/data/adb/ksu`，所以老模块、老授权、老内核补丁全都照常能跑。
+
+### 2.3 底层
+- 内核、`ksud`、`libksu.so`、`/data/adb/ksu` **保持原样**——这些是二进制接口，改名会直接把已刷好的内核打废。
+- 「改底层」体现在**双轨身份**：老路径继续兼容，新路径 `/data/adb/xlh` 归星棱狐所有，以后要换真内核也不用再动管理器。
+
+---
+
+## 3. 目录
+
+```
+星棱狐/
+├── manager/                         ← 管理器 APK 工程（主要改这里）
+│   ├── app/src/main/java/com/iki/xlh/
+│   │   ├── starfox/StarFoxCore.kt          ★ 增强中心核心（存储 + shell）
+│   │   ├── ui/screen/starfox/StarFoxScreen.kt ★ 增强中心界面
+│   │   ├── ui/screen/{home,module,superuser,settings,…}  原有页面
+│   │   └── ui/navigation3/Routes.kt        ★ 新增 Route.StarFox
+│   ├── app/src/main/res/values/strings.xml ★ 新增 starfox_* 文案
+│   └── app/build.gradle.kts         ★ 包名 / 展示名
+├── kernel/                          ← 内核补丁（未改名，保证兼容）
+├── userspace/ksud, ksuinit          ← 用户态守护进程
+├── uapi/                            ← 内核与管理器共用的头文件
+└── README.md
+```
+
+---
+
+## 4. 编译
+
+### 4.1 环境
+| 项 | 版本 |
+| --- | --- |
+| JDK | 21（`sourceCompatibility = VERSION_21`） |
+| Android SDK | compileSdk **37** / buildTools **37.0.0** |
+| NDK | 见 `manager/gradle/libs.versions.toml` 的 `ndk` |
+| Gradle | 用仓库自带 `gradlew` |
+
+### 4.2 最快：双击一键编译
+
+根目录 `build-apk.bat`（双击）或 PowerShell 里 `.\build-apk.ps1`。
+
+它自动搞定全套，全部塞在 `.toolchain/` 里，不动系统环境：
+
+```
+JDK 21 → Android commandline-tools → SDK 平台 → build-tools → NDK
+→ local.properties → 自动生成签名密钥 → gradlew assembleRelease
+```
+
+| 参数 | 作用 |
+| --- | --- |
+| 无 | 出签名好的 release APK |
+| `-Debug` | 出 debug 包，自签，装得快 |
+| `-Clean` | 清掉 `.toolchain` 重来 |
+
+产物：`manager/app/build/outputs/apk/release/*.apk`，**已自动签名，直接 `adb install` 能装**。
+
+> 签名密钥自动生成在 `.toolchain/starfox.jks`，口令 `starfox123`，alias `starfox`。要换自己的就改 `manager/sign.properties`。
+>
+> 脚本会把 `libs.versions.toml` 的 `ndk` 和根 `build.gradle.kts` 的 compileSdk 对齐到本机实际装上的版本（37 装不上就落 36），这几行会真实改动项目文件。
+
+### 4.3 手动命令
+
+```powershell
+cd 星棱狐\manager
+
+@"
+sdk.dir=C\:\\Android\\Sdk
+"@ | Out-File -Encoding ascii local.properties
+
+.\gradlew.bat :app:assembleRelease -PKSU_PACKAGE_NAME=com.iki.xlh
+```
+
+### 4.4 用自己的签名
+`app/build.gradle.kts` 里的 `apksign` 插件读这几个属性，放 `manager/sign.properties`：
+
+```properties
+KEYSTORE_FILE=你的.jks
+KEYSTORE_PASSWORD=xxxx
+KEY_ALIAS=xxxx
+KEY_PASSWORD=xxxx
+```
+
+不配也能出 `app-release-unsigned.apk`，自己用 `apksigner` 签。
+
+### 4.5 离线提示
+- `downloadKpmTools` 会去 GitHub 拉 KPM 工具，**拉不到只警告不报错**（已改）。
+- 根 `build.gradle.kts` 的版本号以前依赖 `git rev-list`，现在没有 git 仓库也能编（已改，回退到 `1.0.0-xinglengfu` / `4001`）。
+
+---
+
+## 5. 装到手机上
+
+管理器只是个壳，**必须先有内核层**：
+
+1. 用 `ksud` 或管理器里的「安装」页，给 `boot.img` / `init_boot.img` 打补丁
+2. `fastboot flash boot <patched.img>`，重启
+3. 装上 `🐾星棱狐🐾` 的 APK
+4. 打开 → 超级用户页能看到 App 列表 = 通了
+5. 设置 → 工具 → **🐾星棱狐🐾 增强中心** 开双模式 / 无痕 / TEE
+
+> 管理器认的是内核里的 `ksu` 接口，不是 APK 名字，所以换名换包名不影响已刷好的内核。
+>
+> 换了包名之后，第一次打开可能会提示「不是当前管理器」。进 **设置 → 扩展 → 动态管理器（Dynamic managers）** 把 `com.iki.xlh` 授权成管理器就行——内核侧有 `dynamic_manager` 机制，按包名 + 签名哈希登记，**不用重刷内核**。
+
+---
+
+## 6. 完全自研的 root 识别（不走上游那套）
+
+入口：`manager/app/src/main/java/com/iki/xlh/starfox/StarFoxDetector.kt`
+接管点：`ui/util/KsuCli.kt` 的 `rootAvailable()` → 先问 StarFoxDetector，再兜底 libsu。
+
+五路独立证据，任一路过就算有 root：
+
+| # | 证据 | 判定方式 |
 | --- | --- | --- |
-| `kmi` | `all` | 要内嵌的 KMI。默认全都要，一个 APK 适配所有 5.10 以上机型 |
-| `package_name` | `com.iki.xlh` | |
-| `expected_hash` | `ff7d77b3…3b8d` | |
-| `expected_size` | `0x033b` | |
-| `version_code` | `30008` | 要和你现在装的 APK 一致，否则覆盖安装会失败 |
-| `version_name` | `v3.4.1-xinglinghu` | |
-| `sign` | `true` | 关掉会产出未签名 APK（装不上，仅供调试） |
+| ① | 模块台账 | `cat /proc/modules`，看有没有 ksu 系模块名 |
+| ② | 模块目录 | `/sys/module/<name>` 存不存在（LKM 已 insmod 的硬证据） |
+| ③ | 守护进程 | `/data/adb/ksu/bin/ksud --version` |
+| ④ | 星棱狐标记 | `/data/adb/xlh/root.marker`（刷入时 ramdisk 钩子写） |
+| ⑤ | 实测 | `id -u` 真的出 0 |
 
-跑完在 **Artifacts** 下载：
+结果带 30 秒缓存，界面里能看到每一路的原始轨迹。
 
-- **`一体构建-管理器APK`** → 装这个就行，模块已经内嵌在里面
-- **`一体构建-LKM模块`** → 单独的 ko，备用
+**认哪些模块名**（`StarFoxDetector.KNOWN_MODULE_NAMES`，直接加就行）：
 
-装好后进「安装」选 boot 镜像，管理器会直接用内嵌的模块修补，**不需要**再选本地 LKM 文件。
-
-### 关于 `kmi`
-
-默认 `all`，也就是把 8 个 GKI 模块全部内嵌进去：
-
-```
-android12-5.10  android13-5.10  android13-5.15  android14-5.15
-android14-6.1   android15-6.6   android16-6.12  android17-6.18
-```
-
-这样一个 APK 拿到任何 5.10 以上的设备上都能用，不用先查 KMI。
-每个模块约 100–300 KB，全部内嵌会让 APK 大几 MB —— 用体积换通用性。
-
-想省体积就自己挑，逗号分隔：
-
-```
-android14-6.1
-android14-6.1,android14-5.15
-```
-
-查自己设备是哪个：
-
-```bash
-adb shell uname -r
-# 6.1.75-android14-11-g4b1a2c3d
-#       ^^^^^^^^^^^^ → android14-6.1
-```
-
-> 5.4 / 4.19 / 4.14 这些非 GKI 内核**不在支持范围内**，它们没有通用 LKM，
-> 必须拿设备自己的内核源码在树内编译。
-
----
-
-## 用法二：只编 LKM
-
-**Actions** → **Build 星棱狐 LKM** → **Run workflow** → `kmi` 填 `all` 或单个。
-
-产物 `xinglinghu-lkm-all` 是 8 个 ko。然后在管理器里：
-**安装** → 选 `init_boot.img` → 展开 **使用本地 LKM 文件** → 选中对应的 ko。
-
-`boot_patch.rs:806-810` 的优先级保证本地 LKM 会覆盖内置的：
-
-```rust
-} else if let Some(kmod_path) = kmod {      // ← 你选了本地文件就走这里
-    Box::new(map_file(&kmod_path)?)
-} else {
-    assets::get_asset(&name)...             // ← 没指定才用内置的
-};
+```kotlin
+val KNOWN_MODULE_NAMES = listOf(
+    "xlh", "starfox", "kernelsu", "kernelsu_next", "sukisu", "ksu",
+)
 ```
 
 ---
 
-## 两个 workflow 都做的安全检查
-
-编译后会自动扫二进制，确认里面**真的**是给你的管理器编的：
-
-```bash
-grep -aq "com.iki.xlh" kernelsu.ko   # 必须命中
-grep -aq "ff7d77b3…"              kernelsu.ko   # 必须命中
-grep -aq "c371061b…"              kernelsu.ko   # 命中就报错
-```
-
-一体构建还会额外检查 APK 里每个 ABI 的 `libksud.so`
-确实内嵌了 `*_kernelsu.ko` —— 因为 ksud 自己的 `build.rs:237`
-会把包名默认成同一个字符串，光 grep 包名是**测不出来**有没有内嵌模块的。
-
-任何一项不过就直接失败，不会给你一个装上去没 root 的包。
-
----
-
-## 本地编译（可选，需要 Docker）
+## 7. 换掉内核模块名（.ko 全走你自己的）
 
 ```powershell
-docker run --rm -it --privileged `
-  -v "$PWD:/build" -w /build/kernel `
-  ghcr.io/ylarod/ddk-min:android14-6.1-20260828 `
-  bash -c "CONFIG_KSU=m CC=clang make KSU_VERSION_OVERRIDE=30008 && ls -l kernelsu.ko"
+# 先看会改哪些点，不动文件
+.\scripts\ko-pipeline.ps1 -Task Rename
+
+# 确认后真改：kernelsu_init/exit/cache -> xlh_init/exit/cache
+.\scripts\ko-pipeline.ps1 -Task Rename -Apply
 ```
 
-三个不能少：`--privileged`、工作目录 `kernel/`、`CONFIG_KSU=m CC=clang make`。
-拉不动 `ghcr.io` 就换 `docker.cnb.cool/ylarod/ddk-min:...`。
+改完要同步三处：
+1. `StarFoxDetector.KNOWN_MODULE_NAMES` 里加 `xlh`
+2. `userspace/ksud` 里 modprobe 的模块名
+3. 重新编内核，`.ko` 传到自己的仓库
+
+把编好的 `.ko` 拿回来：
+
+```powershell
+# 从你自己的仓库 Release 拉 .ko，落到 manager/app/src/main/assets/lkm/
+.\scripts\ko-pipeline.ps1 -Task Fetch -Repo 你的用户名/你的内核仓库 -Tag lkm-latest
+
+# 看现在仓库里认哪些模块名、.ko 有没有就位
+.\scripts\ko-pipeline.ps1 -Task Status
+```
 
 ---
 
-## 注意
+## 8. 上传到 GitHub 自动编译
 
-- **不要**打 `v*` 标签，会触发上游的 `release.yml` 用上游证书编一整套东西。
-- 编出来的模块**只能给你自己的管理器用**，换包名或换签名就失效。
-- 非 GKI 内核（4.14 / 4.19 / 5.4）**不适用**，那些要用设备自己的内核源码在树内编译。
-- 改 `version_code` 时要和实际安装的 APK 对齐，否则系统不让覆盖安装
-  （签名相同但 versionCode 更低会被拒）。
+已经放好流水线：`.github/workflows/build-release.yml`
+
+### 8.1 免 git：走 API 直接推（推荐）
+
+本机没装 git 也能推。双击 `push-to-github.bat`，按提示填两样东西：
+
+```
+Repo  (owner/name) : 你的用户名/你的仓库名
+Token              : ghp_xxxxxxxx
+```
+
+Token 去 <https://github.com/settings/tokens> 生成，勾 **`repo`** + **`workflow`** 两个权限就够。
+
+或者直接命令行：
+
+```powershell
+.\push-to-github.ps1 -Repo 你的用户名/starfox -Token ghp_xxx -Build
+```
+
+脚本做的事：
+
+| 步骤 | 动作 |
+| --- | --- |
+| 0 | `GET /user` 校验 token |
+| 1 | 仓库不存在就 `POST /user/repos` 建一个 |
+| 2 | 扫目录，自动排除 `.git` / `build` / `.gradle` / `.toolchain` / `node_modules` / `*.apk` |
+| 3 | 逐个 `POST /git/blobs` 上传文件内容（被限流自动等 60 秒重试） |
+| 4 | `POST /git/trees` 建目录树 |
+| 5 | `POST /git/commits` 建提交 |
+| 6 | `POST/PATCH /git/refs` 推到 `main`，顺带设为默认分支 |
+| 7 | `POST /actions/workflows/build-release.yml/dispatches` 触发编译 → 轮询状态 → 自动下载 artifact 解出 APK 到 `_download/` |
+
+参数：
+
+| 参数 | 作用 |
+| --- | --- |
+| `-Private` | 建成私有仓库 |
+| `-Build` | 推完立刻触发编译并等结果（不加就只推） |
+| `-SkipUpload` | 跳过上传，只触发编译 |
+| `-Branch` | 默认 `main` |
+
+### 8.2 有 git 的话
+
+```bash
+git init
+git add .
+git commit -m "🐾星棱狐🐾"
+git branch -M main
+git remote add origin https://github.com/你的用户名/你的仓库.git
+git push -u origin main
+```
+
+然后去仓库 **Actions → Build 🐾星棱狐🐾 → Run workflow**。
+
+工作流会做：
+- JDK 21 + Android SDK 37 + NDK 29
+- `./gradlew :app:assembleRelease -PKSU_PACKAGE_NAME=com.iki.xlh`
+- 收集 APK → 上传 artifact
+- 手动触发，不会和上游 `release.yml` 的 `v*` tag 打架
+
+> 仓库里本来就带了上游的全套流水线：`build-manager.yml`（管理器）、`build-lkm.yml` + `ddk-lkm.yml`（**自己编 .ko**）、`ksud.yml`（用户态）、`release.yml`（tag 发版）。想让 action 顺便把你的内核 `.ko` 也编出来，直接用 `build-lkm.yml`，把产物传到自己的 Release，再让 `ko-pipeline.ps1 -Task Fetch` 拉回来。
+
+**想让它顺带拉你自己的 `.ko`**：改 workflow 顶部两个值，或者手动触发时填：
+
+```yaml
+env:
+  KO_REPO: 你的用户名/你的内核仓库   # owner/repo
+  KO_TAG: lkm-latest
+```
+
+它先走 `gh release download`，Release 里没有就退一步 clone 仓库找 `*.ko`。
+
+---
+
+## 9. 已知边界
+
+- `/data/adb/ksu` 这套老路径保留 → 和原版 SukiSU 内核 100% 互通，可以互相刷。
+- 增强中心的开关写的是**约定文件**，要真生效需要配套内核补丁读这些 flag（`/data/adb/xlh/*`）。没打补丁时开关只是记录状态，不会破坏任何东西。
+- 内核模块改名后，旧的已刷内核就认不到了，必须把新 `.ko` 一起刷进去。
+- `compileSdk 37` 属于新 SDK，本地编要装对应 preview 平台；用 GitHub Actions 就省了这步。
+

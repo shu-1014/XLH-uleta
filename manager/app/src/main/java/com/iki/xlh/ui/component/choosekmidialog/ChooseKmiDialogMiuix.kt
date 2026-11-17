@@ -83,7 +83,7 @@ fun ChooseKmiDialogMiuix(
                     )
                     Spacer(modifier = Modifier.width(20.dp))
                     TextButton(
-                        enabled = currentSelection.value.isNotBlank(),
+                        enabled = supportedKMIs.contains(currentSelection.value),
                         onClick = {
                             onSelected(currentSelection.value)
                             onDismissRequest()
