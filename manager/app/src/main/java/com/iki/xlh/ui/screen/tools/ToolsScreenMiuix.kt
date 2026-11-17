@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Backup
+import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.runtime.Composable
@@ -151,7 +152,7 @@ private fun SelinuxToggleSectionMiuix(
 private fun StarFoxSectionMiuix(
     onOpen: () -> Unit,
 ) {
-    AppCard(
+    Card(
         modifier = Modifier
             .padding(top = 12.dp)
             .fillMaxWidth(),
@@ -162,7 +163,7 @@ private fun StarFoxSectionMiuix(
             summary = stringResource(R.string.starfox_tools_entry_summary),
             startAction = {
                 Icon(
-                    imageVector = androidx.compose.material.icons.Icons.Rounded.Face,
+                    imageVector = Icons.Rounded.Face,
                     modifier = Modifier.padding(end = 6.dp),
                     contentDescription = title,
                     tint = colorScheme.onBackground
