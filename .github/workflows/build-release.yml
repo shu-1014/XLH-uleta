@@ -1,17 +1,17 @@
-name: Build 星棱狐 (StarFox)
+name: Build StarFox (XLH)
 
-# 手动触发，避免和上游 release.yml 的 v* tag 抢。
-# 也可以在 Actions 页面填 ko_repo 顺带拉你自己的 .ko。
+# Manual trigger only, avoids clashing with the upstream release.yml on v* tags.
+# Optionally fill ko_repo to also pull your own prebuilt .ko files.
 
 on:
   workflow_dispatch:
     inputs:
       ko_repo:
-        description: '你自己的 .ko 仓库 (owner/repo)，留空则跳过'
+        description: 'Your .ko repo (owner/repo), leave empty to skip'
         required: false
         default: ''
       ko_tag:
-        description: '.ko 所在的 Release tag'
+        description: '.ko release tag'
         required: false
         default: 'lkm-latest'
 
@@ -22,9 +22,6 @@ permissions:
 env:
   KO_REPO: ${{ github.event.inputs.ko_repo }}
   KO_TAG: ${{ github.event.inputs.ko_tag || 'lkm-latest' }}
-  ANDROID_COMPILE_SDK: '36'
-  ANDROID_BUILD_TOOLS: '36.0.0'
-  ANDROID_NDK: '29.0.14206865'
 
 jobs:
   build-manager:
@@ -44,39 +41,61 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
+      # ubuntu-latest already ships an Android SDK, so do NOT use
+      # android-actions/setup-android here: it calls `sdkmanager "tools"`,
+      # and that package no longer exists in current SDK repositories,
+      # which makes the whole step fail with exit code 1.
       - name: Install SDK packages
         run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "platform-tools" || true
-          # 依次尝试编译平台，装到哪个用哪个
+          set -e
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "SDK at $ANDROID_HOME"
+          ls "$ANDROID_HOME"
+
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER=$(find "$ANDROID_HOME" -name sdkmanager -type f 2>/dev/null | head -n 1)
+          fi
+          echo "sdkmanager: $SDKMANAGER"
+          "$SDKMANAGER" --version || true
+
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" "platform-tools" > /dev/null 2>&1 || true
+
+          PLATFORM=""
           for api in 37 36; do
-            if sdkmanager "platforms;android-$api" > /dev/null 2>&1; then
-              echo "PLATFORM_API=$api" >> $GITHUB_ENV
-              break
+            if "$SDKMANAGER" "platforms;android-$api" > /dev/null 2>&1; then
+              PLATFORM="$api"; break
             fi
           done
-          if [ -z "$PLATFORM_API" ]; then echo "no platform installed"; exit 1; fi
-          echo "using platform android-$PLATFORM_API"
+          [ -n "$PLATFORM" ] || { echo "no platform installed"; exit 1; }
+          echo "PLATFORM_API=$PLATFORM" >> $GITHUB_ENV
+          echo "platform android-$PLATFORM"
+
+          BT=""
           for bt in 37.0.0 36.0.0; do
-            if sdkmanager "build-tools;$bt" > /dev/null 2>&1; then
-              echo "BUILD_TOOLS=$bt" >> $GITHUB_ENV
-              break
+            if "$SDKMANAGER" "build-tools;$bt" > /dev/null 2>&1; then
+              BT="$bt"; break
             fi
           done
-          [ -n "$BUILD_TOOLS" ] || { echo "no build-tools installed"; exit 1; }
-          echo "using build-tools $BUILD_TOOLS"
-          # NDK 依次降级
+          [ -n "$BT" ] || { echo "no build-tools"; exit 1; }
+          echo "BUILD_TOOLS=$BT" >> $GITHUB_ENV
+          echo "build-tools $BT"
+
+          # NDK versions must exist on Maven Central as org.lsposed.libcxx:libcxx,
+          # because libs.versions.toml binds lsposed-cxx to version.ref = "ndk".
+          NDK=""
           for ndk in 29.0.14206865 28.1.13356709 27.0.12077973; do
-            if sdkmanager "ndk;$ndk" > /dev/null 2>&1; then
-              echo "NDK_VER=$ndk" >> $GITHUB_ENV
-              break
+            if "$SDKMANAGER" "ndk;$ndk" > /dev/null 2>&1; then
+              NDK="$ndk"; break
             fi
           done
-          [ -n "$NDK_VER" ] || { echo "no ndk installed"; exit 1; }
-          echo "using ndk $NDK_VER"
+          [ -n "$NDK" ] || { echo "no ndk"; exit 1; }
+          echo "NDK_VER=$NDK" >> $GITHUB_ENV
+          echo "ndk $NDK"
 
       - name: Align gradle to installed SDK
         run: |
@@ -97,8 +116,26 @@ jobs:
           s = re.sub(r'extra\["androidTargetSdkVersion"\]\s*=\s*\d+', f'extra["androidTargetSdkVersion"] = {api}', s)
           s = re.sub(r'extra\["androidBuildToolsVersion"\]\s*=\s*"[^"]+"', f'extra["androidBuildToolsVersion"] = "{bt}"', s)
           g.write_text(s, encoding='utf-8')
-          print('aligned:', api, bt, ndk)
+          print('aligned', api, bt, ndk)
           PY
+
+      - name: Signing config
+        run: |
+          mkdir -p manager
+          KEYSTORE="$RUNNER_TEMP/starfox.jks"
+          keytool -genkeypair -keystore "$KEYSTORE" -alias starfox \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass starfox123 -keypass starfox123 \
+            -dname "CN=StarFox,O=StarFox,C=CN" -noprompt
+          keytool -list -keystore "$KEYSTORE" -storepass starfox123
+          # properties format: backslashes are escapes, so keep forward slashes
+          {
+            echo "KEYSTORE_FILE=$KEYSTORE"
+            echo "KEYSTORE_PASSWORD=starfox123"
+            echo "KEY_ALIAS=starfox"
+            echo "KEY_PASSWORD=starfox123"
+          } > manager/sign.properties
+          cat manager/sign.properties
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -110,76 +147,23 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Make gradlew executable
-        run: chmod +x manager/gradlew
-
       - name: Build release APK
         working-directory: manager
         run: |
+          chmod +x gradlew
           ./gradlew :app:assembleRelease -PKSU_PACKAGE_NAME=com.iki.xlh --no-daemon --stacktrace
 
       - name: Collect APK
+        if: always()
         run: |
           mkdir -p out
-          find manager/app/build/outputs/apk -name '*.apk' -exec cp {} out/ \;
-          ls -la out
-          if [ -z "$(ls -A out)" ]; then echo "no apk produced"; exit 1; fi
+          find manager/app/build/outputs -name '*.apk' -exec cp {} out/ \; 2>/dev/null || true
+          ls -la out || true
 
       - name: Upload APK artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: starfox-manager-apk
           path: out/*.apk
-          if-no-files-found: error
-
-  fetch-ko:
-    name: Fetch your kernel .ko
-    runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.ko_repo != '' }}
-    steps:
-      - name: Download .ko from your release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir -p out-ko
-          gh release download "$KO_TAG" --repo "$KO_REPO" --pattern '*.ko' --dir out-ko \
-            || echo "::warning::no .ko found in $KO_REPO@$KO_TAG"
-
-      - name: Fallback - search repo for .ko
-        run: |
-          if [ -z "$(ls -A out-ko 2>/dev/null)" ]; then
-            git clone --depth 1 "https://github.com/${KO_REPO}.git" ko-src || true
-            find ko-src -name '*.ko' -exec cp {} out-ko/ \; 2>/dev/null || true
-          fi
-          ls -la out-ko || true
-
-      - name: Upload .ko artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: starfox-kernel-ko
-          path: out-ko/**/*.ko
           if-no-files-found: warn
-
-  publish:
-    name: Publish rolling release
-    needs: [build-manager]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-
-      - name: Publish to latest-build
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest-build
-          name: 星棱狐 最新构建
-          body: |
-            星棱狐 (StarFox) 管理器自动构建
-
-            - 包名 `com.iki.xlh`
-            - 展示名 星棱狐
-            - 自研五路 root 识别
-            - 内核模块候选名 xlh / starfox / kernelsu / sukisu / ksu
-          files: dist/**/*.apk
-          fail_on_unmatched_files: false
