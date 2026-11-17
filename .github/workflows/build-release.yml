@@ -1,17 +1,15 @@
 name: Build StarFox (XLH)
 
-# Manual trigger only, avoids clashing with the upstream release.yml on v* tags.
-# Optionally fill ko_repo to also pull your own prebuilt .ko files.
-
+# 手动触发，避免和上游 release.yml 的 v* tag 冲突
 on:
   workflow_dispatch:
     inputs:
       ko_repo:
-        description: 'Your .ko repo (owner/repo), leave empty to skip'
+        description: '你自己的 .ko 仓库 (owner/repo)，留空则跳过'
         required: false
         default: ''
       ko_tag:
-        description: '.ko release tag'
+        description: '.ko 所在的 Release tag'
         required: false
         default: 'lkm-latest'
 
@@ -41,10 +39,8 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      # ubuntu-latest already ships an Android SDK, so do NOT use
-      # android-actions/setup-android here: it calls `sdkmanager "tools"`,
-      # and that package no longer exists in current SDK repositories,
-      # which makes the whole step fail with exit code 1.
+      # ubuntu-latest 自带 Android SDK，不要用 android-actions/setup-android：
+      # 它内部执行 `sdkmanager "tools"`，而该包已被 Google 移除，会直接 exit 1。
       - name: Install SDK packages
         run: |
           set -e
@@ -53,27 +49,33 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
           echo "SDK at $ANDROID_HOME"
-          ls "$ANDROID_HOME"
 
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           if [ ! -x "$SDKMANAGER" ]; then
             SDKMANAGER=$(find "$ANDROID_HOME" -name sdkmanager -type f 2>/dev/null | head -n 1)
           fi
           echo "sdkmanager: $SDKMANAGER"
-          "$SDKMANAGER" --version || true
 
           yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
           "$SDKMANAGER" "platform-tools" > /dev/null 2>&1 || true
 
+          # 依赖要求 compileSdk >= 37，且 platforms 包名带小版本号 (37.0/37.1/37.2)
           PLATFORM=""
-          for api in 37 36; do
-            if "$SDKMANAGER" "platforms;android-$api" > /dev/null 2>&1; then
-              PLATFORM="$api"; break
+          MINOR=""
+          for pkg in 37.0 37.2 37.1 36; do
+            if "$SDKMANAGER" "platforms;android-$pkg" > /dev/null 2>&1; then
+              PLATFORM="$pkg"
+              case "$pkg" in
+                *.*) MINOR="${pkg#*.}" ;;
+                *)   MINOR="0" ;;
+              esac
+              break
             fi
           done
           [ -n "$PLATFORM" ] || { echo "no platform installed"; exit 1; }
           echo "PLATFORM_API=$PLATFORM" >> $GITHUB_ENV
-          echo "platform android-$PLATFORM"
+          echo "PLATFORM_MINOR=$MINOR" >> $GITHUB_ENV
+          echo "platform android-$PLATFORM (minor=$MINOR)"
 
           BT=""
           for bt in 37.0.0 36.0.0; do
@@ -81,12 +83,15 @@ jobs:
               BT="$bt"; break
             fi
           done
+          if [ -z "$BT" ]; then
+            BT=$("$SDKMANAGER" --list 2>/dev/null | grep -o 'build-tools;3[0-9]\+\.[0-9]\+\.[0-9]\+' | sort -u | tail -n 1 | cut -d';' -f2)
+          fi
           [ -n "$BT" ] || { echo "no build-tools"; exit 1; }
           echo "BUILD_TOOLS=$BT" >> $GITHUB_ENV
           echo "build-tools $BT"
 
-          # NDK versions must exist on Maven Central as org.lsposed.libcxx:libcxx,
-          # because libs.versions.toml binds lsposed-cxx to version.ref = "ndk".
+          # NDK 版本必须同时存在于 Maven Central 的 org.lsposed.libcxx:libcxx，
+          # 因为 libs.versions.toml 里 lsposed-cxx 用的是 version.ref = "ndk"
           NDK=""
           for ndk in 29.0.14206865 28.1.13356709 27.0.12077973; do
             if "$SDKMANAGER" "ndk;$ndk" > /dev/null 2>&1; then
@@ -101,9 +106,11 @@ jobs:
         run: |
           python3 - <<'PY'
           import os, re, pathlib
-          api = os.environ['PLATFORM_API']
-          bt  = os.environ['BUILD_TOOLS']
-          ndk = os.environ['NDK_VER']
+          platform = os.environ['PLATFORM_API']      # e.g. 37.0 or 36
+          minor    = os.environ['PLATFORM_MINOR']    # e.g. 0
+          bt       = os.environ['BUILD_TOOLS']
+          ndk      = os.environ['NDK_VER']
+          api      = platform.split('.')[0]
 
           toml = pathlib.Path('manager/gradle/libs.versions.toml')
           t = toml.read_text(encoding='utf-8')
@@ -112,11 +119,16 @@ jobs:
 
           g = pathlib.Path('manager/build.gradle.kts')
           s = g.read_text(encoding='utf-8')
-          s = re.sub(r'extra\["androidCompileSdkVersion"\]\s*=\s*\d+', f'extra["androidCompileSdkVersion"] = {api}', s)
-          s = re.sub(r'extra\["androidTargetSdkVersion"\]\s*=\s*\d+', f'extra["androidTargetSdkVersion"] = {api}', s)
-          s = re.sub(r'extra\["androidBuildToolsVersion"\]\s*=\s*"[^"]+"', f'extra["androidBuildToolsVersion"] = "{bt}"', s)
+          s = re.sub(r'extra\["androidCompileSdkVersion"\]\s*=\s*\d+',
+                     f'extra["androidCompileSdkVersion"] = {api}', s)
+          s = re.sub(r'extra\["androidCompileSdkVersionMinor"\]\s*=\s*\d+',
+                     f'extra["androidCompileSdkVersionMinor"] = {minor}', s)
+          s = re.sub(r'extra\["androidTargetSdkVersion"\]\s*=\s*\d+',
+                     f'extra["androidTargetSdkVersion"] = {api}', s)
+          s = re.sub(r'extra\["androidBuildToolsVersion"\]\s*=\s*"[^"]+"',
+                     f'extra["androidBuildToolsVersion"] = "{bt}"', s)
           g.write_text(s, encoding='utf-8')
-          print('aligned', api, bt, ndk)
+          print(f'aligned compileSdk={api} minor={minor} buildTools={bt} ndk={ndk}')
           PY
 
       - name: Signing config
@@ -127,8 +139,8 @@ jobs:
             -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass starfox123 -keypass starfox123 \
             -dname "CN=StarFox,O=StarFox,C=CN" -noprompt
-          keytool -list -keystore "$KEYSTORE" -storepass starfox123
-          # properties format: backslashes are escapes, so keep forward slashes
+          # sign.properties 是 Java properties 格式，反斜杠是转义符，
+          # 所以路径必须用正斜杠，否则密钥路径会失效、静默产出 unsigned 包
           {
             echo "KEYSTORE_FILE=$KEYSTORE"
             echo "KEYSTORE_PASSWORD=starfox123"
