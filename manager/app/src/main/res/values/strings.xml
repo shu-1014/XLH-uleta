@@ -1805,8 +1805,6 @@
     <string name="starfox_register_self">登记本管理器</string>
     <string name="app_name">🐾星棱狐🐾</string>
     <!-- ===== 拨号密令恢复 / 隐身 ===== -->
-    <string name="ikun_icon_restored">已恢复桌面图标并关闭隐身</string>
-    <string name="ikun_recovery_unavailable">图标已恢复，但内核隐身关闭失败</string>
     <string name="starfox_section_disguise">隐身与恢复</string>
     <string name="stealth_title">隐身</string>
     <string name="stealth_hide_icon">隐藏桌面图标</string>
