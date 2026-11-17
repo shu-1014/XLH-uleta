@@ -1803,4 +1803,5 @@
     <string name="starfox_status_registered_no">未登记</string>
     <string name="starfox_detect_now">重新识别</string>
     <string name="starfox_register_self">登记本管理器</string>
+    <string name="app_name">🐾星棱狐🐾</string>
 </resources>
