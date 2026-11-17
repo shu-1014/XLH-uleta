@@ -1814,4 +1814,6 @@
     <string name="stealth_recovery_code">恢复密令</string>
     <string name="stealth_recovery_code_summary">在拨号盘输入 %1$s 可恢复图标并关闭隐身</string>
     <string name="stealth_recovery_reset">恢复默认密令</string>
+    <string name="ikun_icon_restored">已恢复桌面图标并关闭隐身</string>
+    <string name="ikun_recovery_unavailable">图标已恢复，但内核隐身关闭失败</string>
 </resources>
