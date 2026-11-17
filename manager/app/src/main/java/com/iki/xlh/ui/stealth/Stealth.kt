@@ -3,91 +3,78 @@ package com.iki.xlh.ui.stealth
 import com.iki.xlh.Natives
 
 /**
- * Kernel-backed stealth mode.
+ * 内核隐身开关（适配 SukiSU 底座）。
  *
- * ADAPTED from 7kimisu's `Stealth`. Two independent disguises exist in this fork
- * and they are deliberately kept separate:
+ * 来源与差异：
+ *  - MapleSU / 7kimisu 的内核只有一个 `stealth` 总开关（`Natives.stealthState/stealthSet`）。
+ *  - SukiSU 内核没有这个 ioctl，但它把隐身拆成了更细的三项，实际覆盖更全：
+ *      · 挂载隐藏   [Natives.isMountHideEnabled] / [Natives.setMountHideEnabled]
+ *      · SELinux 隐藏 [Natives.isSelinuxHideEnabled] / [Natives.setSelinuxHideEnabled]
+ *      · AVC 伪装   [Natives.isAvcSpoofEnabled]  / [Natives.setAvcSpoofEnabled]
  *
- *  - **Kernel stealth** (this object) makes the kernel stop reporting
- *    [Natives.isManager], so the whole Manager renders as "not installed" to
- *    anyone looking at the screen. Real privileges are unchanged, which is what
- *    keeps the switch itself reachable.
- *  - **Hidden launcher icon** ([StealthController]) is a pure PackageManager
- *    trick with no kernel involvement.
+ * 这里做一层映射，对上层保持 MapleSU 那套「一个总开关 + 三态读数」的语义：
+ *  - 三项全开 → [State.ON]
+ *  - 三项全关 → [State.OFF]
+ *  - 其余情况（部分开 / 读不到 / 内核不支持）→ [State.UNKNOWN]
  *
- * The three-state model matters. [state] is read from the kernel, and a failed
- * read must not be reported to the user as "off": it can mean the kernel lacks
- * the ioctl, that this build is not the recognised manager, or that the call was
- * rejected. Only an explicit 1 is treated as on, and only an explicit 0 as off.
- *
- * The duplicate of this file's knowledge that used to live here — comparing
- * KERNEL_SU_UAPI_VERSION against a "version that introduced stealth" — was wrong
- * and has been removed; see [kernelHasStealthFeature] for why.
+ * 为什么必须有 UNKNOWN：读失败不等于「关」。可能是内核没有这个接口、
+ * 当前 APK 不是被内核认可的管理器、或者调用被拒绝。把它报成「关」会让
+ * 用户以为自己已经不安全，而实际可能根本没查到。
  */
 object Stealth {
 
-    /** Mirrors `KSU_STEALTH_PATH` in `kernel/manager/stealth.c`. */
-    const val STEALTH_FLAG_PATH = "/data/adb/ksu/stealth"
-
-    /** Raw kernel value: 1 = on, 0 = off, anything else = unreadable. */
-    fun kernelState(): Int = runCatching { Natives.stealthState() }.getOrDefault(-1)
+    /** 三项隐身开关的统一读写口。任一项抛异常都当作读不到。 */
+    private fun readStates(): List<Boolean?> = listOf(
+        runCatching { Natives.isMountHideEnabled() }.getOrNull(),
+        runCatching { Natives.isSelinuxHideEnabled() }.getOrNull(),
+        runCatching { Natives.isAvcSpoofEnabled() }.getOrNull(),
+    )
 
     enum class State {
-        /** Kernel explicitly reported 1. */
+        /** 三项都明确为开。 */
         ON,
 
-        /** Kernel explicitly reported 0. */
+        /** 三项都明确为关。 */
         OFF,
 
-        /** Could not read: too old, not the manager, or the call failed. */
+        /** 至少一项读不到，或三项不一致。 */
         UNKNOWN,
     }
 
-    fun state(): State = when (kernelState()) {
-        1 -> State.ON
-        0 -> State.OFF
-        else -> State.UNKNOWN
-    }
-
-    /** True only when the kernel explicitly confirmed stealth is on. */
-    fun isEnabled(): Boolean = kernelState() == 1
-
-    fun setEnabled(enabled: Boolean): Boolean =
-        runCatching { Natives.stealthSet(enabled) }.getOrDefault(false)
-
-    /**
-     * Whether the kernel answered our stealth ioctl at all.
-     *
-     * This deliberately probes the ioctl instead of comparing
-     * [Natives.kernelUAPIVersion] against [UAPI_WITH_STEALTH]. The kernel keeps
-     * KERNEL_SU_UAPI_VERSION at 5 on purpose (raising it would make "new APK +
-     * older kernel" fail ksud's version check and break module mounting), so a
-     * version of 5 says nothing about whether these commands exist. A kernel
-     * that lacks them answers -ENOTTY, which reads back as -1.
-     */
-    fun kernelHasStealthFeature(): Boolean = kernelState() >= 0
-
-    fun kernelLooksOurs(): Boolean = runCatching { Natives.isManager }.getOrDefault(false)
-
-    /**
-     * Toggles stealth and reports failure in words.
-     *
-     * @return null on success, otherwise a user-facing reason.
-     */
-    fun setEnabledReporting(enabled: Boolean): String? {
-        if (setEnabled(enabled)) return null
-        val action = if (enabled) "开启" else "关闭"
+    fun state(): State {
+        val s = readStates()
+        if (s.any { it == null }) return State.UNKNOWN
         return when {
-            // A readable state proves the ioctls exist, so the write failed for
-            // some other reason; say so rather than blaming the kernel version.
-            kernelHasStealthFeature() ->
-                "${action}隐身失败：内核拒绝了本次写入，请重启设备后重试"
-            // The ioctl is missing. If the kernel still calls us its manager then
-            // it is simply an older build of this fork; otherwise it is not ours.
-            kernelLooksOurs() ->
-                "当前内核不支持隐身模式：请刷入本次构建的内核（已装 LKM 的需重新修补）"
-            else ->
-                "当前内核不是本项目的：请重启设备，或卸载其它 root 管理器后重试"
+            s.all { it == true } -> State.ON
+            s.all { it == false } -> State.OFF
+            else -> State.UNKNOWN
         }
     }
+
+    /** 只有三项都被明确确认开着，才算开启。 */
+    fun isEnabled(): Boolean = state() == State.ON
+
+    /**
+     * 统一切换三项隐身为 [enabled]。
+     *
+     * 返回 true 表示三项都写成功。部分成功也返回 false，由调用方决定是否提示；
+     * 这里不回滚——回滚本身也可能失败，反而把状态搅得更乱。
+     */
+    fun setEnabled(enabled: Boolean): Boolean {
+        val results = listOf(
+            runCatching { Natives.setMountHideEnabled(enabled) }.getOrDefault(-1),
+            runCatching { Natives.setSelinuxHideEnabled(enabled) }.getOrDefault(-1),
+            runCatching { Natives.setAvcSpoofEnabled(enabled) }.getOrDefault(false),
+        )
+        // 两个 Int 接口 0 表示成功，Boolean 接口 true 表示成功
+        val ok = results[0] == 0 && results[1] == 0 && results[2] == true
+        return ok
+    }
+
+    /** 三项各自的当前值，给界面逐条展示用。读不到的项为 null。 */
+    fun detail(): Map<String, Boolean?> = mapOf(
+        "mount_hide" to runCatching { Natives.isMountHideEnabled() }.getOrNull(),
+        "selinux_hide" to runCatching { Natives.isSelinuxHideEnabled() }.getOrNull(),
+        "avc_spoof" to runCatching { Natives.isAvcSpoofEnabled() }.getOrNull(),
+    )
 }
