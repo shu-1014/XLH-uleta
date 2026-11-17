@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Security
@@ -105,7 +106,7 @@ private fun StarFoxSectionMaterial(
                 supportingContent = { Text(stringResource(R.string.starfox_tools_entry_summary)) },
                 leadingContent = {
                     Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Rounded.Face,
+                        imageVector = Icons.Rounded.Face,
                         contentDescription = title,
                         modifier = Modifier.padding(end = 12.dp),
                     )
