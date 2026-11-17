@@ -13,7 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Face
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -47,9 +47,12 @@ import com.iki.xlh.starfox.StarFoxResult
 import com.iki.xlh.starfox.StarFoxRootStatus
 import com.iki.xlh.starfox.StarFoxState
 import com.iki.xlh.starfox.StarFoxStore
+import com.iki.xlh.ui.stealth.Stealth
+import com.iki.xlh.ui.stealth.StealthController
 import com.iki.xlh.ui.navigation3.LocalNavigator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withContext
 
 /**
@@ -71,6 +74,10 @@ fun StarFoxScreen() {
     var kernel by remember { mutableStateOf("…") }
     var managers by remember { mutableStateOf<List<String>>(emptyList()) }
     var status by remember { mutableStateOf<StarFoxRootStatus?>(null) }
+    var iconHidden by remember { mutableStateOf(false) }
+    var kernelStealth by remember { mutableStateOf(false) }
+    var recoveryCode by remember { mutableStateOf("") }
+    var stealthDetail by remember { mutableStateOf<Map<String, Boolean?>>(emptyMap()) }
 
     fun persist(next: StarFoxState) {
         state = next
@@ -101,6 +108,11 @@ fun StarFoxScreen() {
         busy = true
         refreshStatus()
         managers = StarFoxCore.detectOtherManagers()
+        // 隐身相关状态初始化（读失败一律当作关闭，不阻塞界面）
+        iconHidden = runCatching { StealthController.isHidden(context) }.getOrDefault(false)
+        kernelStealth = runCatching { Stealth.isEnabled() }.getOrDefault(false)
+        stealthDetail = runCatching { Stealth.detail() }.getOrDefault(emptyMap())
+        recoveryCode = runCatching { StealthController.dialCode(context) }.getOrDefault("")
         busy = false
     }
 
@@ -110,7 +122,7 @@ fun StarFoxScreen() {
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Rounded.Face,
+                            imageVector = Icons.Rounded.AutoAwesome,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
                         )
@@ -308,6 +320,35 @@ fun StarFoxScreen() {
                     }
                 )
             }
+// 隐身（MapleSU 移植：图标隐藏 + 内核三开关 + 拨号密令恢复）
+SectionCard(title = stringResource(R.string.starfox_section_disguise)) {
+    ToggleRow(
+        title = stringResource(R.string.stealth_hide_icon),
+        summary = stringResource(R.string.stealth_hide_icon_summary),
+        checked = iconHidden,
+        enabled = !busy,
+        onCheckedChange = { on ->
+            StealthController.setHidden(context, on)
+            iconHidden = on
+        }
+    )
+    ToggleRow(
+        title = stringResource(R.string.stealth_kernel),
+        summary = stringResource(R.string.stealth_kernel_summary),
+        checked = kernelStealth,
+        enabled = !busy,
+        onCheckedChange = { on ->
+            kernelStealth = Stealth.setEnabled(on)
+            stealthDetail = Stealth.detail()
+        }
+    )
+    Text(
+        text = stringResource(R.string.stealth_recovery_code_summary, recoveryCode),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
 
             // 一键操作
             SectionCard(title = stringResource(R.string.starfox_section_tools)) {
