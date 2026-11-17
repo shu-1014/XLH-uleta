@@ -9,7 +9,6 @@ import androidx.compose.ui.res.stringResource
 import com.iki.xlh.R
 import com.iki.xlh.ui.component.KsuIsValid
 import com.iki.xlh.ui.component.ListPopupDefaults
-import com.iki.xlh.ui.component.miuix.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.ListPopupColumn
@@ -72,7 +71,7 @@ fun RebootDropdownItem(
     index: Int,
     onReboot: (String) -> Unit,
 ) {
-    DropdownItem(
+    com.iki.xlh.ui.component.miuix.DropdownItem(
         text = stringResource(option.labelRes),
         optionSize = optionSize,
         onSelectedIndexChange = {

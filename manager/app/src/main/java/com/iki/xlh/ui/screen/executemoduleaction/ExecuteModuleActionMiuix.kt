@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.captionBar
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
@@ -42,22 +41,20 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.iki.xlh.R
-import com.iki.xlh.ui.component.miuix.AppCard
-import com.iki.xlh.ui.component.miuix.AppScaffold
-import com.iki.xlh.ui.component.miuix.LogConsole
 import com.iki.xlh.ui.component.KeyEventBlocker
-import com.iki.xlh.ui.theme.LocalBackgroundImagePath
 import com.iki.xlh.ui.theme.LocalEnableBlur
 import com.iki.xlh.ui.util.BlurredBar
 import com.iki.xlh.ui.util.rememberBlurBackdrop
 import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
@@ -104,17 +101,15 @@ fun ExecuteModuleActionScreenMiuix(
     val enableBlur = LocalEnableBlur.current
     val backdrop = rememberBlurBackdrop(enableBlur)
     val blurActive = backdrop != null
-    val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
-    val barColor = if (blurActive || hasCustomBackground) Color.Transparent else colorScheme.surface
+    val barColor = if (blurActive) Color.Transparent else colorScheme.surface
 
     BackHandler(enabled = !state.isComplete) { }
 
-    AppScaffold(
+    Scaffold(
         topBar = {
             TopBar(
                 onBack = actions.onBack,
                 onSave = actions.onSaveLog,
-                title = state.title ?: stringResource(R.string.action),
                 backdrop = backdrop,
                 barColor = barColor,
             )
@@ -169,8 +164,12 @@ fun ExecuteModuleActionScreenMiuix(
                     scrollState.animateScrollTo(scrollState.maxValue)
                 }
                 Spacer(Modifier.height(innerPadding.calculateTopPadding()))
-                LogConsole(text = state.text)
-                state.resultNotice?.let { ResultNoticeMiuix(it) }
+                Text(
+                    modifier = Modifier.padding(8.dp),
+                    text = state.text,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                )
                 Spacer(
                     Modifier.height(
                         12.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
@@ -186,14 +185,13 @@ fun ExecuteModuleActionScreenMiuix(
 private fun TopBar(
     onBack: () -> Unit = {},
     onSave: () -> Unit = {},
-    title: String,
     backdrop: LayerBackdrop?,
     barColor: Color,
 ) {
     BlurredBar(backdrop) {
         SmallTopAppBar(
             color = barColor,
-            title = title,
+            title = stringResource(R.string.action),
             navigationIcon = {
                 IconButton(
                     onClick = onBack
@@ -220,27 +218,6 @@ private fun TopBar(
                     )
                 }
             }
-        )
-    }
-}
-
-@Composable
-private fun ResultNoticeMiuix(notice: ActionResultNotice) {
-    val color = when (notice.kind) {
-        ActionResultKind.SUCCESS -> colorScheme.primary
-        ActionResultKind.NOT_APPLICABLE -> colorScheme.onSurfaceVariantSummary
-        ActionResultKind.FAILURE -> colorScheme.error
-    }
-    AppCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-    ) {
-        Text(
-            text = notice.text,
-            color = color,
-            fontSize = 15.sp,
-            modifier = Modifier.padding(16.dp),
         )
     }
 }

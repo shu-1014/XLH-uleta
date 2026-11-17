@@ -16,11 +16,6 @@ extern bool ksu_bundled;
 extern struct selinux_policy *backup_sepolicy;
 extern bool ksu_no_custom_rc;
 
-// SukiSU Nova kernel su version full strings
-#ifndef KSU_VERSION_FULL
-#define KSU_VERSION_FULL "v3.x-00000000@unknown"
-#endif
-
 static inline int startswith(char *s, char *prefix)
 {
     return strncmp(s, prefix, strlen(prefix));

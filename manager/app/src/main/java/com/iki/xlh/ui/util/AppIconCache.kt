@@ -3,7 +3,6 @@ package com.iki.xlh.ui.util
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
-import android.os.Build
 import android.os.Process
 import android.os.UserManager
 import android.util.Log
@@ -75,11 +74,7 @@ object AppIconCache {
             val profiles = um.userProfiles
             var foundMainUserId = userId(Process.myUid())
             try {
-                // Hidden API restrictions only exist from Android 9; the exemption call
-                // itself is a no-op below it, but the library is annotated as 28+.
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    HiddenApiBypass.addHiddenApiExemptions("Landroid/os/UserManager;->hasBadge(I)Z")
-                }
+                HiddenApiBypass.addHiddenApiExemptions("Landroid/os/UserManager;->hasBadge(I)Z")
                 val hasBadgeMethod = UserManager::class.java.getMethod("hasBadge", Int::class.javaPrimitiveType)
                 for (profile in profiles) {
                     val id = profile.hashCode()
@@ -164,14 +159,9 @@ object AppIconCache {
                 val bitmap = loadIconBitmap(context, applicationInfo, size)
 
                 val gpuBitmap = try {
-                    // Bitmap.Config.HARDWARE was added in Android 8.0.
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        bitmap.copy(Bitmap.Config.HARDWARE, false)?.also {
-                            bitmap.recycle()
-                        } ?: bitmap.also { it.prepareToDraw() }
-                    } else {
-                        bitmap.also { it.prepareToDraw() }
-                    }
+                    bitmap.copy(Bitmap.Config.HARDWARE, false)?.also {
+                        bitmap.recycle()
+                    } ?: bitmap.also { it.prepareToDraw() }
                 } catch (e: Exception) {
                     Log.d(TAG, "Failed to copy bitmap to HARDWARE config", e)
                     bitmap.also { it.prepareToDraw() }

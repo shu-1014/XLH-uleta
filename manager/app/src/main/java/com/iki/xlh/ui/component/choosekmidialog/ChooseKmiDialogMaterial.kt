@@ -19,7 +19,6 @@ import com.iki.xlh.ui.component.material.SegmentedColumn
 import com.iki.xlh.ui.component.material.SegmentedRadioItem
 import com.iki.xlh.ui.util.getCurrentKmi
 import com.iki.xlh.ui.util.getSupportedKmis
-import kotlin.collections.map
 
 @Composable
 fun ChooseKmiDialogMaterial(
@@ -50,7 +49,7 @@ fun ChooseKmiDialogMaterial(
                     onSelected(selectedKmi.value)
                     onDismissRequest()
                 },
-                enabled = supportedKMIs.contains(selectedKmi.value)
+                enabled = selectedKmi.value.isNotBlank()
             ) {
                 Text(stringResource(id = R.string.confirm))
             }

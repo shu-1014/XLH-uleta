@@ -12,8 +12,8 @@ enum class UiMode(val value: String) {
             else -> Miuix
         }
 
-        val DEFAULT_VALUE = Material.value
+        val DEFAULT_VALUE = Miuix.value
     }
 }
 
-val LocalUiMode = staticCompositionLocalOf { UiMode.Material }
+val LocalUiMode = staticCompositionLocalOf { UiMode.Miuix }

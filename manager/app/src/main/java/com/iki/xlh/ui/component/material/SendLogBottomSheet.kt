@@ -47,7 +47,6 @@ import com.iki.xlh.ui.component.dialog.rememberLoadingDialog
 import com.iki.xlh.ui.util.getBugreportFile
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
-import top.yukonga.miuix.kmp.nav.gesture.WindowNavigationEventBridge
 
 private tailrec fun Context.findComponentActivity(): ComponentActivity? {
     return when (this) {
@@ -105,7 +104,6 @@ fun SendLogBottomSheet(
         onDismissRequest = { dismiss() },
         containerColor = MaterialTheme.colorScheme.surfaceContainer,
         content = {
-            WindowNavigationEventBridge()
             Row(
                 modifier = Modifier
                     .padding(top = 16.dp, bottom = 32.dp)
@@ -118,7 +116,7 @@ fun SendLogBottomSheet(
                             haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
                             val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH_mm")
                             val current = LocalDateTime.now().format(formatter)
-                            exportBugreportLauncher.launch("SukiSU_Nova_bugreport_${current}.tar.gz")
+                            exportBugreportLauncher.launch("KernelSU_bugreport_${current}.tar.gz")
                         }) {
                         Icon(
                             Icons.Filled.Save,

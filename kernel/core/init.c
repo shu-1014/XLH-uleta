@@ -25,13 +25,9 @@
 #include "hook/syscall_hook.h"
 #include "feature/adb_root.h"
 #include "feature/selinux_hide.h"
-#include "feature/avc_spoof.h"
-#include "feature/uts_spoof.h"
-#include "feature/shell_su_adb_only.h"
 #include "feature/module_blacklist.h"
+#include "feature/shell_su_adb_only.h"
 #include "infra/symbol_resolver.h"
-#include "preinit/preinit.h"
-#include "extension/extension.h"
 
 #if defined(__x86_64__) && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)
 #include <asm/cpufeature.h>
@@ -94,17 +90,9 @@ bool ksu_bundled = false;
 module_param_named(bundled, ksu_bundled, bool, 0);
 #endif
 
-static char *spoof_release = NULL;
-module_param(spoof_release, charp, 0);
-
-static char *spoof_version = NULL;
-module_param(spoof_version, charp, 0);
-
 int __init kernelsu_init(void)
 {
-    int ret;
-
-    pr_info("welcome to KernelSU version " __stringify(KERNEL_SU_VERSION) ", package name " KSU_PACKAGE_NAME "\n");
+    pr_info("welcome to XingLingHu version " __stringify(KERNEL_SU_VERSION) ", package name " KSU_PACKAGE_NAME "\n");
 #if defined(__x86_64__) && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)
     // If the kernel has the hardening patch, X86_FEATURE_INDIRECT_SAFE must be set
     if (!boot_cpu_has(X86_FEATURE_INDIRECT_SAFE)) {
@@ -112,7 +100,7 @@ int __init kernelsu_init(void)
         pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
         pr_alert("**                                                         **");
         pr_alert("**        X86_FEATURE_INDIRECT_SAFE is not enabled!        **");
-        pr_alert("**      KernelSU will abort initialization to prevent      **");
+        pr_alert("**    XingLingHu will abort initialization to prevent      **");
         pr_alert("**                     kernel panic.                       **");
         pr_alert("**                                                         **");
         pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
@@ -131,7 +119,7 @@ int __init kernelsu_init(void)
     pr_alert("*************************************************************");
     pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
     pr_alert("**                                                         **");
-    pr_alert("**         You are running KernelSU in DEBUG mode          **");
+    pr_alert("**       You are running XingLingHu in DEBUG mode          **");
     pr_alert("**                                                         **");
     pr_alert("**     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **");
     pr_alert("*************************************************************");
@@ -146,34 +134,21 @@ int __init kernelsu_init(void)
         return -ENOSYS;
     }
 
-    pr_info("initializing symbol resolver\n");
     ksu_init_symbol_resolver();
-
-    ret = ksu_selinux_inode_init();
-    if (ret) {
-        put_cred(ksu_cred);
-        ksu_cred = NULL;
-        return ret;
-    }
-
-    if (spoof_release || spoof_version) {
-        ksu_spoof_version(spoof_release, spoof_version);
-    }
-
     ksu_syscall_hook_init();
+
+    // Block modules early, before vendor modules are loaded in second stage.
+    ksu_module_blacklist_init();
 
     ksu_feature_init();
     ksu_sulog_init();
     ksu_adb_root_init();
     ksu_lsm_hook_init();
     ksu_selinux_hide_init();
-    ksu_avc_spoof_init();
     ksu_shell_su_adb_only_init();
 
     ksu_supercalls_init();
     ksu_app_profile_init();
-    ksu_extension_init();
-    ksu_extension_register_all();
 
     if (ksu_late_loaded) {
         pr_info("late load mode, skipping kprobe hooks\n");
@@ -189,7 +164,6 @@ int __init kernelsu_init(void)
 
         ksu_allowlist_init();
         ksu_load_allow_list();
-        ksu_dynamic_manager_load();
 
         ksu_syscall_hook_manager_init();
 
@@ -200,9 +174,7 @@ int __init kernelsu_init(void)
         ksu_boot_completed = true;
         track_throne(false);
 
-        ksu_avc_spoof_late_init();
         ksu_feature_apply_forced();
-        ksu_extension_apply_forced();
 
         if (!getenforce()) {
             pr_info("Permissive SELinux, enforcing\n");
@@ -217,8 +189,6 @@ int __init kernelsu_init(void)
         ksu_throne_tracker_init();
 
         ksu_ksud_init();
-
-        ksu_preinit_init();
 
         ksu_file_wrapper_init();
     }
@@ -238,10 +208,8 @@ void __exit kernelsu_exit(void)
 
     ksu_supercalls_exit();
 
-    if (!ksu_late_loaded) {
+    if (!ksu_late_loaded)
         ksu_ksud_exit();
-        ksu_preinit_exit();
-    }
 
     // Wait for any in-flight RCU readers (e.g. handler traversing allow_list)
     synchronize_rcu();
@@ -254,14 +222,12 @@ void __exit kernelsu_exit(void)
     ksu_allowlist_exit();
 
     ksu_shell_su_adb_only_exit();
-    ksu_avc_spoof_exit();
     ksu_selinux_hide_exit();
     ksu_lsm_hook_exit();
     ksu_adb_root_exit();
     ksu_sulog_exit();
     ksu_feature_exit();
     ksu_module_blacklist_exit();
-    ksu_extension_exit();
 
     put_cred(ksu_cred);
 }
@@ -274,8 +240,8 @@ module_init(kernelsu_init);
 module_exit(kernelsu_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("weishu");
-MODULE_DESCRIPTION("Android KernelSU");
+MODULE_AUTHOR("XingLingHu");
+MODULE_DESCRIPTION("Android XingLingHu (star prism fox) root solution, KernelSU compatible");
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0)
 MODULE_IMPORT_NS("VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver");
 #else

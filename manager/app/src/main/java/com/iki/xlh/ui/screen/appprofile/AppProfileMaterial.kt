@@ -1,10 +1,7 @@
 package com.iki.xlh.ui.screen.appprofile
 
-import androidx.core.content.pm.PackageInfoCompat
-import com.iki.xlh.ui.component.profile.TemporaryRootControls
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -16,7 +13,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -24,12 +20,12 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.DropdownMenuGroup
 import androidx.compose.material3.SelectableDropdownMenuItem
@@ -40,7 +36,6 @@ import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
@@ -51,20 +46,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
-import com.iki.xlh.ui.util.customText
-import com.iki.xlh.ui.util.CustomTextKey
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -75,7 +64,7 @@ import com.iki.xlh.ui.component.material.ExpressiveScaffold
 import com.iki.xlh.ui.component.material.ExpressiveToggleButton
 import com.iki.xlh.ui.component.material.SegmentedColumn
 import com.iki.xlh.ui.component.material.SegmentedListItem
-import com.iki.xlh.ui.component.material.ExpressiveSwitch
+import com.iki.xlh.ui.component.material.SegmentedSwitchItem
 import com.iki.xlh.ui.component.material.SnackBarHost
 import com.iki.xlh.ui.component.material.TopBarBackButton
 import com.iki.xlh.ui.component.material.expressiveTopAppBarColors
@@ -133,14 +122,14 @@ fun AppProfileScreenMaterial(
                     packageInfo = state.appGroup.primary.packageInfo,
                     label = state.appGroup.primary.label,
                     modifier = Modifier
-                        .size(60.dp)
-                        .clip(RoundedCornerShape(20.dp))
+                        .padding(top = 4.dp)
+                        .size(48.dp)
                 )
             },
             appUid = state.uid,
             sharedUserId = if (state.isUidGroup) state.sharedUserId else "",
             appVersionName = if (state.isUidGroup) "" else (state.appGroup.primary.packageInfo.versionName ?: ""),
-            appVersionCode = if (state.isUidGroup) 0L else PackageInfoCompat.getLongVersionCode(state.appGroup.primary.packageInfo),
+            appVersionCode = if (state.isUidGroup) 0L else state.appGroup.primary.packageInfo.longVersionCode,
             profile = state.profile,
             isUidGroup = state.isUidGroup,
             isSpecialApp = state.appGroup.primary.special,
@@ -148,10 +137,6 @@ fun AppProfileScreenMaterial(
             onViewTemplate = actions.onViewTemplate,
             onManageTemplate = actions.onManageTemplate,
             onProfileChange = actions.onProfileChange,
-            onPermanentRootChange = actions.onPermanentRootChange,
-            temporaryRoot = state.temporaryRoot,
-            onTemporaryRootChange = actions.onTemporaryRootChange,
-            onTemporaryRootGrant = actions.onTemporaryRootGrant,
         )
     }
 }
@@ -167,10 +152,6 @@ private fun AppProfileInner(
     appVersionName: String,
     appVersionCode: Long,
     profile: Natives.Profile,
-    onPermanentRootChange: (Boolean) -> Unit = {},
-    temporaryRoot: Boolean = false,
-    onTemporaryRootChange: (Boolean) -> Unit = {},
-    onTemporaryRootGrant: (Long?) -> Unit = {},
     isUidGroup: Boolean = false,
     isSpecialApp: Boolean = false,
     affectedApps: List<SuperUserViewModel.AppInfo> = emptyList(),
@@ -196,91 +177,74 @@ private fun AppProfileInner(
     val mode = if (isRootGranted) rootMode else nonRootMode
 
     Column(modifier = modifier) {
-        Row(
+        SegmentedColumn(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            appIcon()
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                Text(
-                    text = appLabel,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Black,
-                )
-                val details = buildList {
-                    if (isSpecialApp) {
-                        add(packageName)
-                    } else if (!isUidGroup) {
-                        add(packageName)
-                        add("$appVersionName ($appVersionCode)")
-                    } else {
-                        if (sharedUserId.isNotEmpty()) add(sharedUserId)
-                        add(stringResource(R.string.group_contains_apps, affectedApps.size))
-                    }
-                }
-                details.forEach {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                .padding(horizontal = 16.dp),
+            content = buildList<@Composable () -> Unit> {
+                add {
+                    SegmentedListItem(
+                        headlineContent = { Text(appLabel) },
+                        supportingContent = {
+                            Column {
+                                if (isSpecialApp) {
+                                    Text(packageName, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                } else if (!isUidGroup) {
+                                    Text("$appVersionName ($appVersionCode)", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(packageName, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                } else {
+                                    if (sharedUserId.isNotEmpty()) {
+                                        Text(text = sharedUserId, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Text(
+                                        text = stringResource(R.string.group_contains_apps, affectedApps.size),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        },
+                        leadingContent = appIcon,
+                        trailingContent = {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                if (userId != 0) {
+                                    StatusTag(
+                                        label = "USER $userId",
+                                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        backgroundColor = MaterialTheme.colorScheme.tertiaryContainer
+                                    )
+                                    StatusTag(
+                                        label = "UID $appId",
+                                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        backgroundColor = MaterialTheme.colorScheme.tertiaryContainer
+                                    )
+                                } else {
+                                    StatusTag(
+                                        label = "UID $appUid",
+                                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        backgroundColor = MaterialTheme.colorScheme.tertiaryContainer
+                                    )
+                                }
+                            }
+                        }
                     )
                 }
-            }
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                if (userId != 0) {
-                    StatusTag(
-                        label = "USER $userId",
-                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                        backgroundColor = MaterialTheme.colorScheme.tertiaryContainer
+                if (!isSpecialApp) add {
+                    SegmentedSwitchItem(
+                        icon = Icons.Filled.Security,
+                        title = stringResource(id = R.string.superuser),
+                        checked = isRootGranted,
+                        onCheckedChange = { onProfileChange(profile.copy(allowSu = it)) },
                     )
                 }
-                StatusTag(
-                    label = "UID ${if (userId != 0) appId else appUid}",
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                    backgroundColor = MaterialTheme.colorScheme.tertiaryContainer
-                )
-            }
-        }
-
-        if (isSpecialApp) {
-            SegmentedColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                content = listOf {
+                add {
                     SegmentedListItem(
                         headlineContent = { Text(stringResource(R.string.profile)) },
                         supportingContent = { Text(mode.text, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                         leadingContent = { Icon(Icons.Filled.AccountCircle, null) },
                     )
                 }
-            )
-        } else {
-            RootSwitchCard(
-                checked = isRootGranted,
-                summary = if (isRootGranted && temporaryRoot) stringResource(R.string.temporary_root_active) else mode.text,
-                onCheckedChange = onPermanentRootChange,
-            )
-        }
-
-        if (!isSpecialApp) {
-            TemporaryRootControls(
-                enabled = temporaryRoot,
-                granted = isRootGranted,
-                onEnabledChange = onTemporaryRootChange,
-                onChoose = onTemporaryRootGrant,
-            )
-        }
+            }
+        )
 
         Crossfade(targetState = isRootGranted, label = "") { current ->
             Column(
@@ -368,60 +332,6 @@ private fun AppProfileInner(
 }
 
 @Composable
-private fun RootSwitchCard(
-    checked: Boolean,
-    summary: String,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    val haptic = LocalHapticFeedback.current
-    val containerColor by animateColorAsState(
-        if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceBright,
-        label = "root_card_container"
-    )
-    val contentColor by animateColorAsState(
-        if (checked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-        label = "root_card_content"
-    )
-    Surface(
-        checked = checked,
-        onCheckedChange = {
-            haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
-            onCheckedChange(it)
-        },
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        shape = MaterialTheme.shapes.large,
-        color = containerColor,
-        contentColor = contentColor,
-    ) {
-        Row(
-            modifier = Modifier
-                .heightIn(min = 76.dp)
-                .padding(horizontal = 20.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.superuser),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = summary,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = contentColor.copy(alpha = 0.75f),
-                )
-            }
-            ExpressiveSwitch(
-                checked = checked,
-                onCheckedChange = null,
-            )
-        }
-    }
-}
-
-@Composable
 private fun TopBar(
     onBack: () -> Unit,
     scrollBehavior: TopAppBarScrollBehavior? = null,
@@ -435,7 +345,7 @@ private fun TopBar(
 ) {
     val haptic = LocalHapticFeedback.current
     LargeFlexibleTopAppBar(
-        title = { Text(customText(CustomTextKey.PAGE_APP_PROFILE)) },
+        title = { Text(stringResource(R.string.profile)) },
         navigationIcon = {
             TopBarBackButton(onClick = onBack)
         },
@@ -511,7 +421,7 @@ private fun ProfileBox(
                         onModeChange(m)
                     }
                 },
-                enabled = m != Mode.Template || hasTemplate,
+                enabled = if (m == Mode.Template) hasTemplate else true,
                 modifier = Modifier
                     .weight(1f)
                     .semantics { role = Role.RadioButton },

@@ -26,11 +26,9 @@
 #include "runtime/ksud.h"
 #include "runtime/ksud_boot.h"
 #include "policy/feature.h"
-#include "feature/module_blacklist.h"
 #include "selinux/selinux.h"
 #include "hook/syscall_hook.h"
 #include "hook/syscall_event_bridge.h"
-#include "preinit/preinit.h"
 
 // clang-format off
 static const char KERNEL_SU_RC[] =
@@ -163,16 +161,12 @@ void ksu_handle_execveat_ksud(const char *path, struct user_arg_ptr *argv)
         char buf[16];
         if (!init_second_stage_executed && check_argv(*argv, 1, "second_stage", buf, sizeof(buf))) {
             pr_info("/system/bin/init second_stage executed\n");
-            ksu_preinit_release();
             ksu_selinux_hide_handle_second_stage();
             apply_kernelsu_rules();
             cache_sid();
             setup_ksu_cred();
             // after apply_kernelsu_rules, so that selinux_hide has its sepolicy backup
             ksu_feature_apply_forced();
-            // Not earlier: a blocked module failing to load in first stage
-            // init is fatal, ksuinit uses modules.blocklist for that instead.
-            ksu_module_blacklist_apply();
             init_second_stage_executed = true;
         }
     }
@@ -181,7 +175,6 @@ void ksu_handle_execveat_ksud(const char *path, struct user_arg_ptr *argv)
         char buf[16];
         if (check_argv(*argv, 1, "-Xzygote", buf, sizeof(buf))) {
             pr_info("exec zygote, /data prepared, second_stage: %d\n", init_second_stage_executed);
-            ksu_preinit_release();
             on_post_fs_data();
             first_zygote = false;
             ksu_stop_ksud_execve_hook();
@@ -195,8 +188,7 @@ static struct file_operations fops_proxy;
 static ssize_t ksu_rc_pos = 0;
 const size_t ksu_rc_len = sizeof(KERNEL_SU_RC) - 1;
 
-// Prefer /metadata/vold, else /metadata/watchdog, else /metadata.
-#define MODULE_RC_PATH_VOLD "/metadata/vold/ksu/modules.rc"
+// Prefer /metadata/watchdog/ when present, else /metadata.
 #define MODULE_RC_PATH_WATCHDOG "/metadata/watchdog/ksu/modules.rc"
 #define MODULE_RC_PATH_DEFAULT "/metadata/ksu/modules.rc"
 static char *module_rc_buf;
@@ -205,12 +197,7 @@ static ssize_t module_rc_pos;
 
 static struct file *open_module_rc(const char **chosen_path)
 {
-    struct file *f = filp_open(MODULE_RC_PATH_VOLD, O_RDONLY, 0);
-    if (!IS_ERR(f)) {
-        *chosen_path = MODULE_RC_PATH_VOLD;
-        return f;
-    }
-    f = filp_open(MODULE_RC_PATH_WATCHDOG, O_RDONLY, 0);
+    struct file *f = filp_open(MODULE_RC_PATH_WATCHDOG, O_RDONLY, 0);
     if (!IS_ERR(f)) {
         *chosen_path = MODULE_RC_PATH_WATCHDOG;
         return f;
@@ -417,7 +404,11 @@ static bool is_init_rc(struct file *fp)
         return false;
     }
 
-    // Bind mounts retain the source dentry name, so match the mounted path.
+    const char *short_name = fp->f_path.dentry->d_name.name;
+    if (strcmp(short_name, "init.rc")) {
+        // we are only interest `init.rc` file name file
+        return false;
+    }
     char path[256];
     char *dpath = d_path(&fp->f_path, path, sizeof(path));
 
@@ -492,6 +483,7 @@ int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *v
 {
     if (*type == EV_KEY && *code == KEY_VOLUMEDOWN) {
         int val = *value;
+        pr_info("KEY_VOLUMEDOWN val: %d\n", val);
         if (val) {
             // key pressed, count it
             volumedown_pressed_count += 1;
@@ -653,7 +645,8 @@ void ksu_stop_input_hook_runtime(void)
         return;
     }
     input_hook_stopped = true;
-    schedule_work(&stop_input_hook_work);
+    bool ret = schedule_work(&stop_input_hook_work);
+    pr_info("unregister input kprobe: %d!\n", ret);
 }
 
 // ksud: module support

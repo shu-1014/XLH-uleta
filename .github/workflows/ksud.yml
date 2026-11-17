@@ -13,15 +13,11 @@ on:
         required: false
         type: boolean
         default: false
-      pack_builtzygisk:
-        required: false
-        type: boolean
-        default: false
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
         fetch-depth: 0
 
@@ -38,25 +34,8 @@ jobs:
       if: ${{ inputs.pack_ksuinit }}
       run: |
         mv ksuinit-aarch64/ksuinit ./userspace/ksud/bin/aarch64/
-        mv ksuinit-arm/ksuinit ./userspace/ksud/bin/arm/
         mv ksuinit-x86_64/ksuinit ./userspace/ksud/bin/x86_64/
         mv ksuinit-riscv64/ksuinit ./userspace/ksud/bin/riscv64/
-
-    - name: Prepare BuiltZygisk
-      if: ${{ inputs.pack_builtzygisk }}
-      run: |
-        if [ -d "builtzygisk-aarch64" ]; then
-          cp -r builtzygisk-aarch64/* ./userspace/ksud/bin/aarch64/
-        fi
-        if [ -d "builtzygisk-arm" ]; then
-          cp -r builtzygisk-arm/* ./userspace/ksud/bin/arm/
-        fi
-        if [ -d "builtzygisk-x86_64" ]; then
-          cp -r builtzygisk-x86_64/* ./userspace/ksud/bin/x86_64/
-        fi
-        if [ -d "builtzygisk-riscv64" ]; then
-          cp -r builtzygisk-riscv64/* ./userspace/ksud/bin/riscv64/
-        fi
         
     - name: Setup rustup
       run: |
@@ -86,8 +65,6 @@ jobs:
         fi
         if [ "${{ inputs.target }}" = riscv64-linux-android ]; then
           source .github/scripts/setup-rust-build.sh riscv64-linux-android 35
-          BUILTINS="$($CLANG_PATH --print-resource-dir)/lib/linux/libclang_rt.builtins-riscv64-android.a"
-          test -f "$BUILTINS"
           cargo +nightly-2026-09-23 build --config .github/riscv64-cargo.toml -Z build-std=std,panic_abort --target "$TRIPLE" --release --manifest-path ./userspace/ksud/Cargo.toml
         else
           source .github/scripts/setup-rust-build.sh ${{ inputs.target }} 26

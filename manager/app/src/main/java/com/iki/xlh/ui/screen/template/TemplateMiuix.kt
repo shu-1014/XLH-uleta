@@ -55,9 +55,6 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
-import com.iki.xlh.ui.util.customText
-import com.iki.xlh.ui.util.CustomTextKey
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
@@ -66,13 +63,11 @@ import androidx.compose.ui.unit.sp
 import com.iki.xlh.R
 import com.iki.xlh.data.model.TemplateInfo
 import com.iki.xlh.ui.component.ListPopupDefaults
-import com.iki.xlh.ui.component.miuix.AppCard
-import com.iki.xlh.ui.component.miuix.AppScaffold
 import com.iki.xlh.ui.component.miuix.DropdownItem
-import com.iki.xlh.ui.theme.LocalBackgroundImagePath
 import com.iki.xlh.ui.theme.LocalEnableBlur
 import com.iki.xlh.ui.util.BlurredBar
 import com.iki.xlh.ui.util.rememberBlurBackdrop
+import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
@@ -82,6 +77,7 @@ import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.PullToRefresh
+import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
@@ -146,10 +142,9 @@ fun AppProfileTemplateScreenMiuix(
     val enableBlur = LocalEnableBlur.current
     val backdrop = rememberBlurBackdrop(enableBlur)
     val blurActive = backdrop != null
-    val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
-    val barColor = if (blurActive || hasCustomBackground) Color.Transparent else colorScheme.surface
+    val barColor = if (blurActive) Color.Transparent else colorScheme.surface
 
-    AppScaffold(
+    Scaffold(
         topBar = {
             TopBar(
                 onBack = actions.onBack,
@@ -282,7 +277,7 @@ private fun TemplateItem(
     template: TemplateInfo,
     onClick: () -> Unit,
 ) {
-    AppCard(
+    Card(
         modifier = Modifier.padding(bottom = 12.dp),
         onClick = onClick,
         showIndication = true,
@@ -321,10 +316,10 @@ private fun TemplateItem(
             }
 
             Text(
-                text = "${template.id}${if (template.author.isEmpty()) "" else ", ${template.author}"}",
+                text = "${template.id}${if (template.author.isEmpty()) "" else " by @${template.author}"}",
                 modifier = Modifier.padding(top = 1.dp),
                 fontSize = 12.sp,
-                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight(550),
                 color = colorScheme.onSurfaceVariantSummary,
             )
 
@@ -393,7 +388,7 @@ private fun TopBar(
     BlurredBar(backdrop) {
         TopAppBar(
             color = barColor,
-            title = customText(CustomTextKey.PAGE_TEMPLATE),
+            title = stringResource(R.string.settings_profile_template),
             navigationIcon = {
                 IconButton(
                     onClick = onBack

@@ -9,7 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.iki.xlh.ui.theme.LocalBackgroundImagePath
+import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 
 @Stable
 data class SearchStatus(
@@ -37,19 +37,15 @@ data class SearchStatus(
     fun TopAppBarAnim(
         modifier: Modifier = Modifier,
         visible: Boolean = shouldCollapsed(),
-        backgroundColor: Color = Color.Transparent,
+        backgroundColor: Color = colorScheme.surface,
         content: @Composable () -> Unit
     ) {
-        val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
-        val bg = if (hasCustomBackground) Color.Transparent else backgroundColor
         Box(modifier = modifier) {
-            if (bg != Color.Transparent) {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .background(bg)
-                )
-            }
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(backgroundColor)
+            )
             Box(
                 modifier = Modifier
                     .graphicsLayer { alpha = if (visible) 1f else 0f }

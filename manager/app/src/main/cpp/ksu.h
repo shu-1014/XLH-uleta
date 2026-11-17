@@ -53,56 +53,19 @@ int set_selinux_hide_enabled(bool enabled);
 
 bool is_selinux_hide_enabled();
 
-// Mount hide
-int set_mount_hide_enabled(bool enabled);
+// Stealth mode: 1 = on, 0 = off, -1 = could not be read (treat as unknown)
+int get_stealth_state();
 
-bool is_mount_hide_enabled();
-
-// AVC log spoof
-int set_avc_spoof_enabled(bool enabled);
-bool is_avc_spoof_enabled();
-
-// CPU spoof SET-MIDR io passthrough (kept struct layout from
-// uapi/supercall.h::ksu_set_spoof_cpu_cmd).
-int ksu_set_spoof_cpu(const struct ksu_set_spoof_cpu_cmd *cmd);
-
-// KSU_EXTENSION_UMOUNT_PATHS
-int umount_paths_wipe();
-int umount_paths_add(const char *path, uint32_t flags);
-int umount_paths_delete(const char *path);
-int umount_paths_list(char *buffer, uint32_t buf_size);
-
-// KSU_EXTENSION_DYNAMIC_MANAGER
-int dynamic_manager_get(struct ksu_manager_cmd *cmd);
-int dynamic_manager_set(struct ksu_manager_cmd *cmd);
+bool set_stealth_state(bool enabled);
 
 bool get_allow_list(struct ksu_new_get_allow_list_cmd *);
-
-bool get_full_version(char* buff);
-bool get_hook_type(char *buff);
 
 inline std::pair<int, int> legacy_get_info() {
     int32_t version = -1;
     int32_t flags = 0;
     int32_t result = 0;
-    prctl(static_cast<int>(0xDEADBEEF), 2, &version, &flags, &result);
+    prctl(0xDEADBEEF, 2, &version, &flags, &result);
     return {version, flags};
 }
-
-#define DEFINE_CACHED_GETTER(name, ioctl, cmd_type, field, size) \
-    static char g_##name[size] = {0}; \
-    bool get_##name(char *buff) { \
-        if (g_##name[0] == '\0') { \
-            struct cmd_type cmd = {0}; \
-            if (ksuctl(ioctl, &cmd) == 0) { \
-                snprintf(g_##name, sizeof(g_##name), "%s", cmd.field); \
-            } \
-        } \
-        if (g_##name[0] != '\0') { \
-            snprintf(buff, size, "%s", g_##name); \
-            return true; \
-        } \
-        return false; \
-    }
 
 #endif //KERNELSU_KSU_H

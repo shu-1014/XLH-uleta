@@ -23,7 +23,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,20 +33,21 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.iki.xlh.R
-import com.iki.xlh.ui.component.miuix.AppScaffold
-import com.iki.xlh.ui.component.miuix.LogConsole
 import com.iki.xlh.ui.component.KeyEventBlocker
-import com.iki.xlh.ui.theme.LocalBackgroundImagePath
 import com.iki.xlh.ui.theme.LocalEnableBlur
 import com.iki.xlh.ui.util.BlurredBar
 import com.iki.xlh.ui.util.rememberBlurBackdrop
 import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
+import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -72,8 +72,7 @@ fun FlashScreenMiuix(
     val scrollState = rememberScrollState()
     val backdrop = rememberBlurBackdrop(enableBlur)
     val blurActive = backdrop != null
-    val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
-    val barColor = if (blurActive || hasCustomBackground) Color.Transparent else colorScheme.surface
+    val barColor = if (blurActive) Color.Transparent else colorScheme.surface
 
     if (state.showJailbreakWarning) {
         JailbreakFlashWarningDialog(
@@ -82,7 +81,7 @@ fun FlashScreenMiuix(
         )
     }
 
-    AppScaffold(
+    Scaffold(
         topBar = {
             TopBar(
                 state.flashingStatus,
@@ -93,51 +92,27 @@ fun FlashScreenMiuix(
             )
         },
         floatingActionButton = {
-            when {
-                state.showRebootAction -> {
-                    val reboot = stringResource(id = state.rebootLabelRes)
-                    FloatingActionButton(
-                        modifier = Modifier
-                            .padding(
-                                bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
-                                        WindowInsets.captionBar.asPaddingValues().calculateBottomPadding() + 20.dp,
-                                end = 20.dp
-                            )
-                            .border(0.05.dp, colorScheme.outline.copy(alpha = 0.5f), CircleShape),
-                        onClick = actions.onReboot,
-                        shadowElevation = 0.dp,
-                        content = {
-                            Icon(
-                                Icons.Rounded.Refresh,
-                                reboot,
-                                Modifier.size(40.dp),
-                                tint = colorScheme.onPrimary
-                            )
-                        },
-                    )
-                }
-                state.showCloseAction -> {
-                    val close = stringResource(id = R.string.close)
-                    FloatingActionButton(
-                        modifier = Modifier
-                            .padding(
-                                bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
-                                        WindowInsets.captionBar.asPaddingValues().calculateBottomPadding() + 20.dp,
-                                end = 20.dp
-                            )
-                            .border(0.05.dp, colorScheme.outline.copy(alpha = 0.5f), CircleShape),
-                        onClick = actions.onBack,
-                        shadowElevation = 0.dp,
-                        content = {
-                            Icon(
-                                Icons.Rounded.Close,
-                                close,
-                                Modifier.size(40.dp),
-                                tint = colorScheme.onPrimary
-                            )
-                        },
-                    )
-                }
+            if (state.showRebootAction) {
+                val reboot = stringResource(id = state.rebootLabelRes)
+                FloatingActionButton(
+                    modifier = Modifier
+                        .padding(
+                            bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
+                                    WindowInsets.captionBar.asPaddingValues().calculateBottomPadding() + 20.dp,
+                            end = 20.dp
+                        )
+                        .border(0.05.dp, colorScheme.outline.copy(alpha = 0.5f), CircleShape),
+                    onClick = actions.onReboot,
+                    shadowElevation = 0.dp,
+                    content = {
+                        Icon(
+                            Icons.Rounded.Refresh,
+                            reboot,
+                            Modifier.size(40.dp),
+                            tint = colorScheme.onPrimary
+                        )
+                    },
+                )
             }
         },
         popupHost = { },
@@ -163,7 +138,12 @@ fun FlashScreenMiuix(
                     scrollState.animateScrollTo(scrollState.maxValue)
                 }
                 Spacer(Modifier.height(innerPadding.calculateTopPadding()))
-                LogConsole(text = state.text)
+                Text(
+                    modifier = Modifier.padding(8.dp),
+                    text = state.text,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                )
                 Spacer(
                     Modifier.height(
                         12.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +

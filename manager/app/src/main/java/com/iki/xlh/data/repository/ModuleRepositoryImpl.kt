@@ -1,8 +1,6 @@
 package com.iki.xlh.data.repository
 
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import com.iki.xlh.data.model.Module
 import com.iki.xlh.data.model.ModuleUpdateInfo
@@ -10,14 +8,9 @@ import com.iki.xlh.ksuApp
 import com.iki.xlh.ui.util.isNetworkAvailable
 import com.iki.xlh.ui.util.listModules
 import com.iki.xlh.ui.util.module.sanitizeVersionString
-import okhttp3.Call
-import okhttp3.Callback
 import okhttp3.Request
-import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.IOException
-import kotlin.coroutines.resumeWithException
 
 class ModuleRepositoryImpl : ModuleRepository {
 
@@ -38,7 +31,7 @@ class ModuleRepositoryImpl : ModuleRepository {
                         name = obj.optString("name"),
                         author = obj.optString("author", "Unknown"),
                         version = obj.optString("version", "Unknown"),
-                        versionCode = obj.optLong("versionCode", 0L),
+                        versionCode = obj.optInt("versionCode", 0),
                         description = obj.optString("description"),
                         enabled = obj.getBoolean("enabled"),
                         update = obj.optBoolean("update"),
@@ -49,10 +42,7 @@ class ModuleRepositoryImpl : ModuleRepository {
                         metamodule = (obj.optInt("metamodule") != 0) || obj.optBoolean("metamodule"),
                         zygisk = (obj.optInt("zygisk") != 0) || obj.optBoolean("zygisk"),
                         actionIconPath = obj.optString("actionIcon").takeIf { it.isNotBlank() },
-                        webUiIconPath = obj.optString("webuiIcon").takeIf { it.isNotBlank() },
-                        preinit = obj.optString("preinit"),
-                        bannerPath = obj.optString("banner").takeIf { it.isNotBlank() },
-                        suppressedByBuiltin = obj.optBoolean("suppressed_by_builtin")
+                        webUiIconPath = obj.optString("webuiIcon").takeIf { it.isNotBlank() }
                     )
                 }.toList()
         }
@@ -68,9 +58,15 @@ class ModuleRepositoryImpl : ModuleRepository {
             }
 
             val url = module.updateJson
-            val result = ksuApp.okhttpClient.newCall(
+            val response = ksuApp.okhttpClient.newCall(
                 Request.Builder().url(url).build()
-            ).awaitModuleUpdateBody()
+            ).execute()
+
+            val result = if (response.isSuccessful) {
+                response.body.string()
+            } else {
+                ""
+            }
 
             if (result.isEmpty()) {
                 return@runCatching ModuleUpdateInfo.Empty
@@ -79,7 +75,7 @@ class ModuleRepositoryImpl : ModuleRepository {
             val updateJson = JSONObject(result)
             var version = updateJson.optString("version", "")
             version = sanitizeVersionString(version)
-            val versionCode = updateJson.optLong("versionCode", 0L)
+            val versionCode = updateJson.optInt("versionCode", 0)
             val zipUrl = updateJson.optString("zipUrl", "")
             val changelog = updateJson.optString("changelog", "")
 
@@ -88,25 +84,6 @@ class ModuleRepositoryImpl : ModuleRepository {
             } else {
                 ModuleUpdateInfo(zipUrl, version, changelog, versionCode)
             }
-        }.onFailure { if (it is CancellationException) throw it }
+        }
     }
-}
-
-internal suspend fun Call.awaitModuleUpdateBody(): String = suspendCancellableCoroutine { continuation ->
-    continuation.invokeOnCancellation { cancel() }
-    enqueue(object : Callback {
-        override fun onFailure(call: Call, e: IOException) {
-            continuation.resumeWithException(e)
-        }
-
-        override fun onResponse(call: Call, response: Response) {
-            // Read before resuming so cancellation also cancels an in-progress body read.
-            val result = runCatching {
-                response.use {
-                    if (continuation.isActive && it.isSuccessful) it.body.string() else ""
-                }
-            }
-            continuation.resumeWith(result)
-        }
-    })
 }

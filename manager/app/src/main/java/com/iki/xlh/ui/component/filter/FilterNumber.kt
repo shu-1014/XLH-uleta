@@ -4,7 +4,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 
 class FilterNumber(
-    value: Int,
+    private val value: Int,
     private val minValue: Int = Int.MIN_VALUE,
     private val maxValue: Int = Int.MAX_VALUE,
 ) : BaseFieldFilter(value.toString()) {
@@ -49,7 +49,7 @@ class FilterNumber(
                             if (tempValue !in minValue..maxValue) {
                                 newString.deleteCharAt(newString.lastIndex)
                             }
-                        } catch (_: NumberFormatException) {
+                        } catch (e: NumberFormatException) {
                             // 超出int范围
                             newString.deleteCharAt(newString.lastIndex)
                         }

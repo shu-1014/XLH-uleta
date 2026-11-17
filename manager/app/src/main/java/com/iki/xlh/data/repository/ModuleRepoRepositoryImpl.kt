@@ -15,7 +15,6 @@ import com.iki.xlh.data.registry.ApiVersionRef
 import com.iki.xlh.data.registry.FileRegistryCache
 import com.iki.xlh.data.registry.RegistryClient
 import com.iki.xlh.data.registry.RegistryFetcher
-import com.iki.xlh.data.registry.RegistryKind
 import com.iki.xlh.data.registry.RegistryLocale
 import com.iki.xlh.data.registry.RegistryUpdatePolicy
 import com.iki.xlh.data.registry.RegistryUrls
@@ -36,10 +35,10 @@ class ModuleRepoRepositoryImpl : ModuleRepoRepository {
     companion object {
         private const val TAG = "ModuleRepoRepository"
 
-        
+        /** Site root of KernelSU Modules; every API path is resolved against it. */
         const val REGISTRY_BASE_URL = RegistryUrls.DEFAULT_BASE_URL
 
-        
+        /** Upper bound for a single JSON / HTML document. */
         private const val MAX_DOCUMENT_BYTES = 32L * 1024 * 1024
 
         // One client per process so the list and detail screens share the same catalog.
@@ -118,7 +117,7 @@ class ModuleRepoRepositoryImpl : ModuleRepoRepository {
         moduleId: String,
         updateJsonUrl: String,
         zipUrl: String,
-        versionCode: Long,
+        versionCode: Int,
     ): UpdateVerification = withContext(Dispatchers.IO) {
         if (RegistryUpdatePolicy.isUnrelatedToRegistry(client.baseUrl, updateJsonUrl, zipUrl)) {
             return@withContext UpdateVerification.Legacy
@@ -155,7 +154,7 @@ class ModuleRepoRepositoryImpl : ModuleRepoRepository {
     }.getOrDefault(iso to 0L)
 
     private fun ApiModuleSummary.toRepoModule(): RepoModule =
-        buildRepoModule(id, name, summary, authors, tags, metamodule, kind, icon, stable, stars, starsRepository)
+        buildRepoModule(id, name, summary, authors, tags, metamodule, icon, stable, stars, starsRepository)
 
     private fun buildRepoModule(
         id: String,
@@ -164,7 +163,6 @@ class ModuleRepoRepositoryImpl : ModuleRepoRepository {
         authors: List<ApiAuthor>,
         tags: List<String>,
         metamodule: Boolean,
-        kind: String,
         icon: String?,
         stable: ApiVersionRef,
         stars: Int?,
@@ -182,7 +180,6 @@ class ModuleRepoRepositoryImpl : ModuleRepoRepository {
             summary = summary.trim(),
             tags = tags,
             metamodule = metamodule,
-            isScript = kind == RegistryKind.SCRIPT,
             iconUrl = icon?.let { client.resolve(it) },
             latestVersion = stable.version,
             latestVersionCode = stable.versionCode,
@@ -199,7 +196,7 @@ class ModuleRepoRepositoryImpl : ModuleRepoRepository {
         readmeFailed: Boolean,
         fromCache: Boolean,
     ): RepoModuleDetail {
-        val module = buildRepoModule(id, name, summary, authors, tags, metamodule, kind, icon, stable, stars, starsRepository)
+        val module = buildRepoModule(id, name, summary, authors, tags, metamodule, icon, stable, stars, starsRepository)
         return RepoModuleDetail(
             module = module,
             license = license,

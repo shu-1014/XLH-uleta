@@ -46,7 +46,6 @@ import androidx.compose.material.icons.automirrored.outlined.ChromeReaderMode
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.InstallMobile
-import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material.icons.rounded.Star
@@ -91,8 +90,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.stringResource
-import com.iki.xlh.ui.util.customText
-import com.iki.xlh.ui.util.CustomTextKey
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -118,7 +115,6 @@ import com.iki.xlh.ui.component.material.TopBarBackButton
 import com.iki.xlh.ui.component.material.expressiveTopAppBarColors
 import com.iki.xlh.ui.component.statustag.StatusTag
 import com.iki.xlh.ui.screen.module.ExpandableDescriptionText
-import com.iki.xlh.ui.screen.scriptrun.lastRunText
 import com.iki.xlh.ui.theme.LocalModuleDescriptionMaxLines
 import com.iki.xlh.ui.util.isDownloadAvailable
 import com.iki.xlh.ui.util.rememberContentReady
@@ -144,7 +140,7 @@ fun ModuleRepoScreenMaterial(
         topBar = {
             SearchAppBar(
                 snackbarHostState = snackbarHostState,
-                title = { Text(text = customText(CustomTextKey.PAGE_MODULE_REPO)) },
+                title = { Text(text = stringResource(R.string.module_repos)) },
                 searchText = state.searchStatus.searchText,
                 onSearchTextChange = actions.onSearchTextChange,
                 onClearClick = actions.onClearSearch,
@@ -293,7 +289,6 @@ fun ModuleRepoScreenMaterial(
 @Composable
 private fun RepoBadges(
     metamodule: Boolean,
-    isScript: Boolean,
     installState: RepoInstallState,
 ) {
     Row(
@@ -306,14 +301,6 @@ private fun RepoBadges(
                 modifier = Modifier.padding(bottom = 4.dp),
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 backgroundColor = MaterialTheme.colorScheme.primary
-            )
-        }
-        if (isScript) {
-            StatusTag(
-                stringResource(R.string.module_repo_script_badge),
-                modifier = Modifier.padding(bottom = 4.dp),
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                backgroundColor = MaterialTheme.colorScheme.tertiaryContainer
             )
         }
         when (installState) {
@@ -339,7 +326,7 @@ private fun RepoBadges(
 @Composable
 private fun RepoModuleList(
     modules: List<RepoModule>,
-    installedVersions: Map<String, Long>,
+    installedVersions: Map<String, Int>,
     listState: LazyListState,
     modifier: Modifier = Modifier,
     stale: Boolean = false,
@@ -367,6 +354,7 @@ private fun RepoModuleList(
             }
         }
         items(modules, key = { it.moduleId }, contentType = { "module" }) { module ->
+            val moduleAuthor = stringResource(id = R.string.module_author)
             val installState = repoInstallState(installedVersions[module.moduleId], module.latestVersionCode)
             val maxLinesLimit = LocalModuleDescriptionMaxLines.current
             var summaryExpanded by rememberSaveable(module.moduleId) { mutableStateOf(false) }
@@ -379,7 +367,7 @@ private fun RepoModuleList(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(18.dp, 16.dp, 16.dp, 12.dp)
+                        .padding(16.dp, 14.dp, 16.dp, 10.dp)
                 ) {
                     if (module.moduleName.isNotEmpty()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -387,17 +375,23 @@ private fun RepoModuleList(
                             Text(
                                 text = module.moduleName,
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.SemiBold,
+                                lineHeight = MaterialTheme.typography.bodySmall.lineHeight,
                             )
                         }
                     }
                     Text(
-                        text = if (module.authors.isNotEmpty()) "${module.moduleId}, ${module.authors}" else module.moduleId,
-                        modifier = Modifier.padding(top = 4.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontFamily = FontFamily.Monospace,
+                        text = "ID: ${module.moduleId}",
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (module.authors.isNotEmpty()) {
+                        Text(
+                            text = "$moduleAuthor: ${module.authors}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     if (module.summary.isNotEmpty()) {
                         ExpandableDescriptionText(
                             text = module.summary,
@@ -422,7 +416,7 @@ private fun RepoModuleList(
                         )
                     }
 
-                    RepoBadges(module.metamodule, module.isScript, installState)
+                    RepoBadges(module.metamodule, installState)
                     HorizontalDivider(thickness = Dp.Hairline)
                     Spacer(modifier = Modifier.height(4.dp))
 
@@ -432,8 +426,7 @@ private fun RepoModuleList(
                     ) {
                         Text(
                             text = module.latestVersion,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -482,7 +475,7 @@ fun ModuleRepoDetailScreenMaterial(
     val module = state.module
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val confirmTitle = stringResource(if (state.isScript) R.string.script_run_title else R.string.module_install)
+    val confirmTitle = stringResource(R.string.module_install)
     var pendingDownload by remember { mutableStateOf<(() -> Unit)?>(null) }
     val confirmDialog = rememberConfirmDialog(onConfirm = { pendingDownload?.invoke() })
 
@@ -582,7 +575,7 @@ fun ModuleRepoDetailScreenMaterial(
     }
 }
 
-
+/** Loading / not-in-index / failure placeholder; returns true when the page content can be shown. */
 @Composable
 private fun LazyItemScope.detailStatus(state: ModuleRepoDetailUiState, onRetry: () -> Unit): Boolean {
     when {
@@ -624,7 +617,7 @@ private fun LazyItemScope.detailStatus(state: ModuleRepoDetailUiState, onRetry: 
     return false
 }
 
-
+/** The detail is the last good cached copy because it could not be refreshed. */
 @Composable
 private fun CachedDetailNotice(modifier: Modifier = Modifier) {
     Text(
@@ -829,7 +822,6 @@ fun ReleasesPage(
                         ReleaseZipSegmentedItem(
                             release = rel,
                             canInstall = state.canInstall,
-                            isScript = state.isScript,
                             confirmTitle = confirmTitle,
                             confirmDialog = confirmDialog,
                             scope = scope,
@@ -859,7 +851,6 @@ fun ReleasesPage(
 private fun ReleaseZipSegmentedItem(
     release: RepoRelease,
     canInstall: Boolean,
-    isScript: Boolean,
     confirmTitle: String,
     confirmDialog: ConfirmDialogHandle,
     scope: CoroutineScope,
@@ -910,21 +901,20 @@ private fun ReleaseZipSegmentedItem(
                                 if (isDownloadAvailable(downloadedUri)) {
                                     onInstallModule(downloadedUri)
                                 } else {
-                                    handle.setDownloaded(null)
+                                    handle.downloadedUri = null
                                 }
                             }
                         },
                         contentPadding = ButtonDefaults.TextButtonContentPadding
                     ) {
-                        val label = stringResource(if (isScript) R.string.script_run else R.string.install)
                         Icon(
                             modifier = Modifier.size(20.dp),
-                            imageVector = if (isScript) Icons.Outlined.PlayArrow else Icons.Outlined.InstallMobile,
-                            contentDescription = label
+                            imageVector = Icons.Outlined.InstallMobile,
+                            contentDescription = stringResource(R.string.install)
                         )
                         Text(
                             modifier = Modifier.padding(start = 7.dp),
-                            text = label,
+                            text = stringResource(R.string.install),
                             style = MaterialTheme.typography.labelMedium,
                         )
                     }
@@ -1021,13 +1011,6 @@ fun InfoPage(
                         text = stringResource(R.string.module_repo_not_in_index),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
-                    )
-                }
-                if (state.isScript) {
-                    Text(
-                        text = lastRunText(LocalContext.current, state.lastRun),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 if (detail?.healthStale == true) {

@@ -71,9 +71,7 @@ import com.iki.xlh.ui.component.liquid.vibrancy
 import com.iki.xlh.ui.component.miuix.animation.DampedDragAnimation
 import com.iki.xlh.ui.component.miuix.animation.InteractiveHighlight
 import com.iki.xlh.ui.theme.isInDarkTheme
-import com.iki.xlh.ui.util.rememberProgressiveBarBlurModifier
 import top.yukonga.miuix.kmp.blur.Backdrop
-import top.yukonga.miuix.kmp.blur.ProgressiveBlur
 import top.yukonga.miuix.kmp.blur.blur
 import top.yukonga.miuix.kmp.blur.drawBackdrop
 import top.yukonga.miuix.kmp.blur.highlight.BloomStroke
@@ -81,7 +79,6 @@ import top.yukonga.miuix.kmp.blur.highlight.Highlight
 import top.yukonga.miuix.kmp.blur.highlight.LightPosition
 import top.yukonga.miuix.kmp.blur.highlight.LightSource
 import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.progressiveTextureBlurEffect
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.blur.sensor.rememberDeviceTilt
 import top.yukonga.miuix.kmp.theme.LocalContentColor
@@ -122,13 +119,7 @@ private const val LIGHT_REF_Y = 0.7f
 private const val GRAVITY_DIR_THRESHOLD_SQ = 0.01f // |g_xy| > 0.1, ≈ 6° tilt
 private const val GRAVITY_ANGLE_STEP_RAD = (3.0 * PI / 180.0).toFloat()
 
-/** Full progressive-blur radius (dp) at the pill's bottom edge. */
-private const val PillProgressiveBlurRadius = 22f
-
-/** Blur tint layered over the progressive blur when the pill is not in liquid-glass mode. */
-private const val PillProgressiveTintAlpha = 0.22f
-
-
+/** Tracks gravity for a `dualPeak` highlight's primary light, with an extra UV-clockwise offset on top. */
 @Composable
 private fun rememberQuantizedGravityAngle(): State<Float> {
     val tiltState = rememberDeviceTilt()
@@ -147,9 +138,9 @@ private fun rememberQuantizedGravityAngle(): State<Float> {
 
 @Composable
 private fun rememberGravityRotatedHighlight(
+    base: Highlight,
     extraDegrees: Float = 0f,
 ): State<Highlight> {
-    val base = iosIndicatorSpecular
     val baseStyle = base.style as BloomStroke
     val angle = rememberQuantizedGravityAngle()
     return remember(angle, base, extraDegrees) {
@@ -219,19 +210,14 @@ fun FloatingBottomBar(
     backdrop: Backdrop,
     tabsCount: Int,
     isBlurEnabled: Boolean = true,
-    progressiveBlur: Boolean = false,
-    accentColor: Color = MiuixTheme.colorScheme.primary,
-    tabContentColor: Color = MiuixTheme.colorScheme.onSurface,
-    surfaceContainer: Color = MiuixTheme.colorScheme.surfaceContainer,
     content: @Composable RowScope.((Int) -> Unit) -> Unit
 ) {
     val isInDark = isInDarkTheme()
     val pillShape = remember { CircleShape }
-    val containerColor = if (isBlurEnabled || progressiveBlur) {
-        surfaceContainer.copy(0.4f)
-    } else {
-        surfaceContainer
-    }
+    val accentColor = MiuixTheme.colorScheme.primary
+    val tabContentColor = MiuixTheme.colorScheme.onSurface
+    val surfaceContainer = MiuixTheme.colorScheme.surfaceContainer
+    val containerColor = if (isBlurEnabled) surfaceContainer.copy(0.4f) else surfaceContainer
 
     val tabsBackdrop = rememberLayerBackdrop()
     val density = LocalDensity.current
@@ -340,8 +326,8 @@ fun FloatingBottomBar(
         )
     }
 
-    val baseHighlight = rememberGravityRotatedHighlight(extraDegrees = -45f)
-    val pillHighlight = rememberGravityRotatedHighlight(extraDegrees = 90f)
+    val baseHighlight = rememberGravityRotatedHighlight(iosIndicatorSpecular, extraDegrees = -45f)
+    val pillHighlight = rememberGravityRotatedHighlight(iosIndicatorSpecular, extraDegrees = 90f)
 
     val combinedBackdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop)
 
@@ -351,8 +337,8 @@ fun FloatingBottomBar(
     ) {
         Row(
             Modifier
-                .onGloballyPositioned { layoutCoordinates ->
-                    totalWidthPx = layoutCoordinates.size.width.toFloat()
+                .onGloballyPositioned { coords ->
+                    totalWidthPx = coords.size.width.toFloat()
                     val contentWidthPx = totalWidthPx - with(density) { 8.dp.toPx() }
                     tabWidthPx = (contentWidthPx / tabsCount).coerceAtLeast(0f)
                 }
@@ -367,23 +353,14 @@ fun FloatingBottomBar(
                     ),
                 )
                 .then(
-                    when {
-                        isBlurEnabled -> Modifier.drawBackdrop(
+                    if (isBlurEnabled) {
+                        Modifier.drawBackdrop(
                             backdrop = backdrop,
                             shape = { pillShape },
                             effects = {
                                 padding = maxOf(padding, 40.dp.toPx())
                                 vibrancy()
-                                if (progressiveBlur) {
-                                    // The pill itself gets the edge gradient: strongest at its
-                                    // bottom, sharp at the top, so it blends into the page edge.
-                                    progressiveTextureBlurEffect(
-                                        blurRadiusX = PillProgressiveBlurRadius,
-                                        gradient = ProgressiveBlur.Bottom,
-                                    )
-                                } else {
-                                    blur(4.dp.toPx(), 4.dp.toPx())
-                                }
+                                blur(4.dp.toPx(), 4.dp.toPx())
                                 lens(
                                     refractionHeight = 24.dp.toPx(),
                                     refractionAmount = 24.dp.toPx(),
@@ -397,22 +374,9 @@ fun FloatingBottomBar(
                                 scaleY = s
                             },
                             onDrawSurface = { drawRect(containerColor) },
-                            progressiveGradient = if (progressiveBlur) {
-                                ProgressiveBlur.Bottom
-                            } else {
-                                null
-                            },
                         )
-
-                        progressiveBlur -> rememberProgressiveBarBlurModifier(
-                            backdrop = backdrop,
-                            gradient = ProgressiveBlur.Bottom,
-                            tint = surfaceContainer,
-                            tintAlpha = PillProgressiveTintAlpha,
-                            shape = pillShape,
-                        ).background(containerColor, pillShape)
-
-                        else -> Modifier.background(containerColor, pillShape)
+                    } else {
+                        Modifier.background(containerColor, pillShape)
                     }
                 )
                 .then(

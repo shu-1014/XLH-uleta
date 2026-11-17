@@ -1,5 +1,4 @@
 #include "feature/selinux_hide.h"
-#include "feature/avc_spoof.h"
 #include <linux/err.h>
 #include <linux/fs.h>
 #include <linux/namei.h>
@@ -11,7 +10,6 @@
 #include "runtime/ksud_boot.h"
 #include "runtime/ksud.h"
 #include "manager/manager_observer.h"
-#include "extension/dynamic_manager.h"
 #include "manager/throne_tracker.h"
 
 bool ksu_module_mounted __read_mostly = false;
@@ -30,7 +28,6 @@ void on_post_fs_data(void)
     pr_info("on_post_fs_data!\n");
 
     ksu_load_allow_list();
-    ksu_dynamic_manager_load();
     ksu_observer_init();
     // Sanity check for safe mode only needs early-boot input samples.
     ksu_stop_input_hook_runtime();
@@ -74,5 +71,4 @@ void on_boot_completed(void)
     pr_info("on_boot_completed!\n");
     track_throne(true);
     ksu_selinux_hide_drop_backup_if_unused();
-    ksu_avc_spoof_late_init();
 }

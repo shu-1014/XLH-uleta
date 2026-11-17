@@ -10,7 +10,7 @@ import kotlinx.parcelize.Parcelize
 import com.iki.xlh.R
 
 @Parcelize
-sealed class InstallMethod : Parcelable {
+internal sealed class InstallMethod : Parcelable {
     data class SelectFile(
         val uri: Uri? = null,
         @get:StringRes override val label: Int = R.string.select_file,
@@ -34,13 +34,6 @@ sealed class InstallMethod : Parcelable {
             get() = R.string.install_inactive_slot
     }
 
-    data class HorizonKernel(
-        val uri: Uri? = null,
-        val slot: String? = null,
-        @get:StringRes override val label: Int = R.string.horizon_kernel,
-        override val summary: String? = null
-    ) : InstallMethod()
-
     abstract val label: Int
 
     @IgnoredOnParcel
@@ -49,7 +42,9 @@ sealed class InstallMethod : Parcelable {
 
 fun isKoFile(context: Context, uri: Uri): Boolean {
     val seg = uri.lastPathSegment ?: ""
-    return seg.endsWith(".ko", ignoreCase = true) || try {
+    if (seg.endsWith(".ko", ignoreCase = true)) return true
+
+    return try {
         context.contentResolver.query(
             uri,
             arrayOf(OpenableColumns.DISPLAY_NAME),

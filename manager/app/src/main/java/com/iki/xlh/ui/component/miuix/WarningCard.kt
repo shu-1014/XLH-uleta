@@ -11,8 +11,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.iki.xlh.ui.component.WarningLevel
-import com.iki.xlh.ui.theme.backgroundAwareColor
 import com.iki.xlh.ui.theme.isInDarkTheme
+import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
@@ -27,11 +27,11 @@ fun WarningCard(
     onClick: (() -> Unit)? = null,
     action: (@Composable () -> Unit)? = null,
 ) {
-    AppCard(
+    Card(
         modifier = modifier,
         onClick = { onClick?.invoke() },
         colors = CardDefaults.defaultColors(
-            color = backgroundAwareColor(level.containerColor()),
+            color = level.containerColor(),
             contentColor = level.contentColor(),
         ),
         showIndication = onClick != null,

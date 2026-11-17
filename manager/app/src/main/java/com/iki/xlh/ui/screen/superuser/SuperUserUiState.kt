@@ -53,6 +53,3 @@ data class StatusMeta(
     val bg: Color,
     val fg: Color
 )
-
-
-internal enum class AppFilter { All, Root, Custom }

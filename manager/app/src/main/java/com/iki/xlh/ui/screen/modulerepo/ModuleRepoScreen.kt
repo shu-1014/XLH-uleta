@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -35,15 +36,12 @@ import com.iki.xlh.data.model.RepoRelease
 import com.iki.xlh.data.registry.DownloadVerificationException
 import com.iki.xlh.data.registry.ExpectedFile
 import com.iki.xlh.data.registry.RegistryUrls
-import com.iki.xlh.data.script.ScriptRepository
-import com.iki.xlh.data.script.ScriptRunRecord
 import com.iki.xlh.ksuApp
 import com.iki.xlh.ui.LocalUiMode
 import com.iki.xlh.ui.UiMode
 import com.iki.xlh.ui.navigation3.LocalNavigator
 import com.iki.xlh.ui.navigation3.Route
 import com.iki.xlh.ui.screen.flash.FlashIt
-import com.iki.xlh.ui.screen.scriptrun.ScriptRunArg
 import com.iki.xlh.ui.util.DownloadManager
 import com.iki.xlh.ui.util.download
 import com.iki.xlh.ui.viewmodel.ModuleRepoDetailViewModel
@@ -51,7 +49,6 @@ import com.iki.xlh.ui.viewmodel.ModuleRepoViewModel
 import com.iki.xlh.ui.viewmodel.ModuleViewModel
 import okhttp3.Request
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 
 @Composable
 fun ModuleRepoScreen() {
@@ -92,7 +89,6 @@ fun ModuleRepoScreen() {
                 latestVersionCode = module.latestVersionCode,
                 latestReleaseTime = module.latestReleaseTime,
                 metamodule = module.metamodule,
-                script = module.isScript,
             )
             navigator.push(Route.ModuleRepoDetail(args))
         },
@@ -107,7 +103,7 @@ fun ModuleRepoScreen() {
 @Composable
 fun ModuleRepoDetailScreen(module: RepoModuleArg) {
     val navigator = LocalNavigator.current
-    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
     val detailVm = viewModel<ModuleRepoDetailViewModel>(key = "module-repo-detail-${module.moduleId}")
     val detailState by detailVm.state.collectAsStateWithLifecycle()
     val installedVm = viewModel<ModuleViewModel>()
@@ -120,40 +116,23 @@ fun ModuleRepoDetailScreen(module: RepoModuleArg) {
         detailVm.load(module.moduleId)
     }
 
-    // Scripts are never installed: an installed module of the same id is unrelated.
-    val installedVersionCode = if (detailState.detail?.module?.isScript ?: module.script) {
-        null
-    } else {
-        installedUiState.modules.firstOrNull { it.id == module.moduleId }?.versionCode
-    }
-    val runCount by ScriptRepository.runCount.collectAsStateWithLifecycle()
-    // SharedPreferences load from disk on first use: keep it off the main thread.
-    val lastRun by produceState<ScriptRunRecord?>(null, module.moduleId, runCount) {
-        value = withContext(Dispatchers.IO) { ScriptRepository.history.last(module.moduleId) }
-    }
+    val installedVersionCode = installedUiState.modules.firstOrNull { it.id == module.moduleId }?.versionCode
     val state = ModuleRepoDetailUiState(
         module = module,
-        lastRun = lastRun,
         detail = detailState.detail,
         loaded = detailState.loaded,
         notInIndex = detailState.notInIndex,
         loadFailed = detailState.loadFailed,
         installedVersionCode = installedVersionCode,
     )
-    // Only web links leave the app; registry documents are validated, this is defence in depth.
-    val openUrl: (String) -> Unit = { url -> if (RegistryUrls.isWebUrl(url)) uriHandler.openUri(url) }
+    // External navigation is disabled in this build: opening a module's page
+    // would hand the user off to a third-party site.
+    val openUrl: (String) -> Unit = { }
     val actions = ModuleRepoDetailActions(
         onBack = { navigator.pop() },
         onOpenWebUrl = { state.webUrl.takeIf { it.isNotEmpty() }?.let(openUrl) },
         onOpenUrl = openUrl,
-        onInstallModule = { uri ->
-            if (state.isScript) {
-                val name = state.detail?.module?.moduleName ?: module.moduleName
-                navigator.push(Route.ScriptRun(ScriptRunArg(uri, registryId = module.moduleId, displayName = name)))
-            } else {
-                navigator.push(Route.Flash(FlashIt.FlashModules(listOf(uri))))
-            }
-        },
+        onInstallModule = { uri -> navigator.push(Route.Flash(FlashIt.FlashModules(listOf(uri)))) },
         onRetry = { detailVm.load(module.moduleId, force = true) },
     )
 
@@ -163,31 +142,17 @@ fun ModuleRepoDetailScreen(module: RepoModuleArg) {
     }
 }
 
-
+/** UI state of downloading one release ZIP. */
 @Stable
-class ReleaseDownloadHandle(private val sha256: String, downloadedUri: Uri?) {
+class ReleaseDownloadHandle {
     var isDownloading by mutableStateOf(false)
     var progress by mutableIntStateOf(0)
-    var downloadedUri by mutableStateOf(downloadedUri)
-        private set
-
-    fun setDownloaded(uri: Uri?) {
-        downloadedUri = uri
-        if (uri != null) verifiedDownloads[sha256] = uri else verifiedDownloads.remove(sha256)
-    }
+    var downloadedUri by mutableStateOf<Uri?>(null)
 }
-
-/**
- * Verified release ZIPs of this process, keyed by SHA-256, so the Install / Run button survives
- * leaving and reopening the detail page. Callers still check [com.iki.xlh.ui.util.isDownloadAvailable] before use.
- */
-private val verifiedDownloads = ConcurrentHashMap<String, Uri>()
 
 @Composable
 fun rememberReleaseDownload(release: RepoRelease): ReleaseDownloadHandle =
-    remember(release.zipUrl, release.sha256) {
-        ReleaseDownloadHandle(release.sha256, verifiedDownloads[release.sha256])
-    }
+    remember(release.zipUrl, release.sha256) { ReleaseDownloadHandle() }
 
 /**
  * Downloads a release ZIP. The download service only accepts GitHub Release URLs (and their CDN
@@ -203,7 +168,7 @@ fun CoroutineScope.startReleaseDownload(context: Context, release: RepoRelease, 
             fileName = release.zipName,
             onDownloaded = { uri ->
                 handle.isDownloading = false
-                handle.setDownloaded(uri)
+                handle.downloadedUri = uri
             },
             onDownloading = { handle.isDownloading = true },
             onProgress = { p -> launch(Dispatchers.Main) { handle.progress = p } },
@@ -232,7 +197,7 @@ fun formatFileSize(size: Long): String = when {
     else -> "$size B"
 }
 
-
+/** "abcdef12…34567890" for compact display; the full hash is still selectable in the info text. */
 fun shortHash(hash: String, head: Int = 12, tail: Int = 8): String =
     if (hash.length <= head + tail + 1) hash else hash.take(head) + "…" + hash.takeLast(tail)
 
@@ -265,7 +230,7 @@ private fun loadRegistryIcon(url: String): ImageBitmap? {
     }.getOrNull()?.also { iconCache.put(url, it) }
 }
 
-
+/** Module icon from the registry (raster formats only); renders nothing until/unless it loads. */
 @Composable
 fun RepoModuleIcon(url: String?, modifier: Modifier = Modifier, size: Dp = 24.dp) {
     if (url == null) return

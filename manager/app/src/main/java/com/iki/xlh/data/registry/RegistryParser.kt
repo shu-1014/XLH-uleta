@@ -10,17 +10,17 @@ import kotlinx.serialization.json.intOrNull
 
 open class RegistryException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
-
+/** The document is not valid JSON or violates the protocol. */
 class RegistryFormatException(message: String, cause: Throwable? = null) : RegistryException(message, cause)
 
-
+/** The document declares a schemaVersion this client does not understand. */
 class UnsupportedSchemaException(val schemaVersion: Int?) :
     RegistryException("Unsupported registry schemaVersion: ${schemaVersion ?: "missing"}")
 
-
+/** Documents of two different builds were observed even after re-reading the index. */
 class BuildMismatchException(message: String) : RegistryException(message)
 
-
+/** The module is not part of the current index (e.g. suspended or removed). */
 class ModuleNotInIndexException(val moduleId: String) : RegistryException("Module $moduleId is not in the registry index")
 
 /**
@@ -42,15 +42,11 @@ class RegistryParser(private val json: Json = DEFAULT_JSON) {
         private val SHA256 = Regex("^[0-9a-f]{64}$")
         private val GIT_SHA = Regex("^[0-9a-f]{40}$")
         private val FULL_NAME = Regex("^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
-        
+        /** GitHub "owner/name"; it becomes a link, so "." / ".." names are refused. */
         private val STARS_REPOSITORY = Regex("^[A-Za-z0-9-]+/(?!\\.\\.?$)[A-Za-z0-9._-]+$")
 
         fun isValidModuleId(id: String): Boolean = id.length in 2..64 && MODULE_ID.matches(id)
         fun isValidBuildId(id: String): Boolean = BUILD_ID.matches(id)
-
-        
-        fun isSupportedKind(kind: String, metamodule: Boolean): Boolean =
-            RegistryKind.isKnown(kind) && !(kind == RegistryKind.SCRIPT && metamodule)
     }
 
     private fun parseObject(text: String): JsonObject {
@@ -118,7 +114,6 @@ class RegistryParser(private val json: Json = DEFAULT_JSON) {
         )
         requireBuildId(detail.buildId)
         if (!isValidModuleId(detail.id)) throw RegistryFormatException("Invalid module id: ${detail.id}")
-        if (!isSupportedKind(detail.kind, detail.metamodule)) throw RegistryFormatException("Unsupported kind: ${detail.kind}")
         if (detail.stable.versionCode < 1) throw RegistryFormatException("Invalid stable versionCode")
         if (detail.source.host != "github") throw RegistryFormatException("Unsupported source host: ${detail.source.host}")
         val fullName = detail.source.fullName
@@ -166,7 +161,6 @@ class RegistryParser(private val json: Json = DEFAULT_JSON) {
         if (!isValidModuleId(s.id)) return null
         if (!RegistryUrls.isValidApiPath(s.detail)) return null
         if (s.stable.versionCode < 1) return null
-        if (!isSupportedKind(s.kind, s.metamodule)) return null
         return s.copy(
             icon = s.icon?.takeIf(RegistryUrls::isValidApiPath),
             authors = s.authors.map { a -> a.copy(url = a.url?.takeIf(RegistryUrls::isHttpsUrl)) },

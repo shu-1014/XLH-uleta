@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use log::{info, warn};
-use std::fmt::Write as FmtWrite;
+use rustix::cstr;
 use std::{process::Command, time::Instant};
 
 use crate::module::{ScriptWait, handle_updated_modules, prune_modules};
@@ -35,13 +35,7 @@ fn dump_process_info(label: &str) {
     );
 }
 
-pub fn run(
-    package_name: &str,
-    kmi: Option<String>,
-    allow_shell: bool,
-    spoof_release: Option<&String>,
-    spoof_version: Option<&String>,
-) -> Result<()> {
+pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool) -> Result<()> {
     utils::daemonize(false)?;
     info!("late-load command triggered!");
     dump_process_info("late-load start");
@@ -65,39 +59,14 @@ pub fn run(
         // 4. Load kernelsu.ko from memory with manual relocation
         info!("Loading kernelsu.ko for KMI {kmi}...");
         // bundled flag is meaningless in jailbreak mode since we can't flash boot to update it.
-        let mut params = if allow_shell {
-            "allow_shell=1 ".to_string()
+        let params = if allow_shell {
+            cstr!("allow_shell=1")
         } else {
-            String::new()
+            cstr!("")
         };
-
-        if let Some(r) = spoof_release {
-            // Match the escaping used by boot_patch when writing ksu_config so
-            // values containing '"' or '\' survive kernel param parsing.
-            let escaped = r.replace('\\', "\\\\").replace('"', "\\\"");
-            let _ = write!(params, "spoof_release=\"{escaped}\" ");
-        }
-        if let Some(v) = spoof_version {
-            let escaped = v.replace('\\', "\\\\").replace('"', "\\\"");
-            let _ = write!(params, "spoof_version=\"{escaped}\" ");
-        }
-
-        let params_cstr = std::ffi::CString::new(params.trim())?;
-        ksuinit::load_module(&ko_data, &params_cstr).context("Failed to load kernelsu.ko")?;
+        ksuinit::load_module(&ko_data, params).context("Failed to load kernelsu.ko")?;
         info!("kernelsu.ko loaded successfully!");
         dump_process_info("after load_module");
-    }
-
-    // Apply spoofing via IOCTL if KernelSU was already loaded or for built-in
-    // This ensures it works even if it wasn't loaded just now
-    if spoof_release.is_some() || spoof_version.is_some() {
-        let r = spoof_release.map_or("", |s| s.as_str());
-        let v = spoof_version.map_or("", |s| s.as_str());
-        if let Err(e) = crate::ksucalls::set_spoof_version(r, v) {
-            warn!("Failed to set spoof version via IOCTL: {e}");
-        } else {
-            info!("Successfully set spoofed version: release='{r}', version='{v}'");
-        }
     }
 
     // We need to reset stdin/stdout/stderr; otherwise, sending file descriptors via cmd transactions
@@ -111,8 +80,6 @@ pub fn run(
     }
 
     utils::install(None, None).context("Failed to install ksud")?;
-
-    crate::hot_install::clean_trash();
 
     // 5. Handle module updates
     if let Err(e) = handle_updated_modules() {
@@ -142,19 +109,7 @@ pub fn run(
         warn!("init features failed: {e}");
     }
 
-    // 7b. Initialize extensions (forced / module-managed are skipped).
-    crate::extension::init_forced_extensions();
-    if let Err(e) = crate::extension::init_extensions() {
-        warn!("init extensions failed: {e}");
-    }
-
     // 8. Execute late-load stage scripts with a shared boot deadline
-    if let Err(e) = crate::builtin_zygisk::apply_sepolicy() {
-        warn!("late-load: apply builtin zygisk sepolicy failed: {e}");
-    }
-    if let Err(e) = crate::builtin_zygisk::bootstrap() {
-        warn!("late-load: bootstrap builtin zygisk failed: {e}");
-    }
     let wait = ScriptWait::Until(Instant::now() + defs::BOOT_STAGE_TIMEOUT);
     init_event::run_stage("late-load", wait);
 
@@ -170,9 +125,6 @@ pub fn run(
 
     // 11. Execute post-mount stage scripts using the same deadline
     init_event::run_stage("post-mount", wait);
-    if let Err(e) = crate::builtin_zygisk::rearm() {
-        warn!("late-load: rearm builtin zygisk failed: {e}");
-    }
 
     // 12. Execute service stage scripts (non-blocking)
     init_event::run_stage("service", ScriptWait::NoWait);

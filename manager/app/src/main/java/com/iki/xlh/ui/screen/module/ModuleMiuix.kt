@@ -19,13 +19,12 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,7 +59,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Code
-import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -78,7 +76,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.FixedScale
@@ -87,15 +84,11 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import com.iki.xlh.ui.util.customText
-import com.iki.xlh.ui.util.CustomTextKey
 import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -116,23 +109,18 @@ import com.iki.xlh.ui.component.ScrollToTopOnChange
 import com.iki.xlh.ui.component.SearchStatus
 import com.iki.xlh.ui.component.dialog.rememberConfirmDialog
 import com.iki.xlh.ui.component.dialog.rememberLoadingDialog
-import com.iki.xlh.ui.component.miuix.AppCard
-import com.iki.xlh.ui.component.miuix.AppScaffold
 import com.iki.xlh.ui.component.miuix.SearchBarFake
 import com.iki.xlh.ui.component.miuix.SearchBox
 import com.iki.xlh.ui.component.miuix.SearchPager
-import com.iki.xlh.ui.theme.LocalBackgroundImagePath
 import com.iki.xlh.ui.theme.LocalEnableBlur
 import com.iki.xlh.ui.theme.LocalModuleDescriptionMaxLines
-import com.iki.xlh.ui.theme.backgroundAwareCardColors
 import com.iki.xlh.ui.theme.isInDarkTheme
 import com.iki.xlh.ui.util.BlurredBar
 import com.iki.xlh.ui.util.getFileName
 import com.iki.xlh.ui.util.reboot
 import com.iki.xlh.ui.util.rememberBlurBackdrop
-import sh.calvin.reorderable.ReorderableItem
-import sh.calvin.reorderable.rememberReorderableLazyListState
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.FloatingActionButton
 import top.yukonga.miuix.kmp.basic.FloatingActionButtonDefaults
@@ -143,6 +131,7 @@ import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.PullToRefresh
+import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.SnackbarDuration
 import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
@@ -208,7 +197,6 @@ fun ModulePagerMiuix(
 
     val shortcutState = rememberModuleShortcutState(context)
     val showShortcutDialog = remember { mutableStateOf(false) }
-    var infoModuleId by rememberSaveable { mutableStateOf<String?>(null) }
 
     val pickShortcutIconLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -268,16 +256,16 @@ fun ModulePagerMiuix(
     val refreshTick = remember { mutableIntStateOf(0) }
 
     val backdrop = rememberBlurBackdrop(enableBlur)
-    val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
+    val blurActive = backdrop != null
+    val barColor = if (blurActive) Color.Transparent else colorScheme.surface
 
-    AppScaffold(
-        containerColor = if (hasCustomBackground) Color.Transparent else colorScheme.surface,
+    Scaffold(
         topBar = {
-            BlurredBar(backdrop = backdrop, scrollBehavior = scrollBehavior) {
-                searchStatus.TopAppBarAnim(backgroundColor = Color.Transparent) {
+            BlurredBar(backdrop) {
+                searchStatus.TopAppBarAnim(backgroundColor = barColor) {
                     TopAppBar(
-                        color = Color.Transparent,
-                        title = customText(CustomTextKey.PAGE_MODULES),
+                        color = barColor,
+                        title = stringResource(R.string.module),
                         actions = {
                             Box {
                                 val showTopPopup = remember { mutableStateOf(false) }
@@ -301,84 +289,24 @@ fun ModulePagerMiuix(
                                     content = {
                                         ListPopupColumn {
                                             DropdownImpl(
-                                                text = stringResource(R.string.module_sort_enabled_first),
-                                                optionSize = 8,
-                                                isSelected = uiState.sortEnabledFirst,
-                                                onSelectedIndexChange = {
-                                                    actions.onToggleSortEnabledFirst()
-                                                    showTopPopup.value = false
-                                                },
-                                                index = 0
-                                            )
-                                            DropdownImpl(
-                                                text = stringResource(R.string.module_sort_metamodule_first),
-                                                optionSize = 8,
-                                                isSelected = uiState.sortMetamoduleFirst,
-                                                onSelectedIndexChange = {
-                                                    actions.onToggleSortMetamoduleFirst()
-                                                    showTopPopup.value = false
-                                                },
-                                                index = 1
-                                            )
-                                            DropdownImpl(
-                                                text = stringResource(R.string.module_sort_zygisk_first),
-                                                optionSize = 8,
-                                                isSelected = uiState.sortZygiskFirst,
-                                                onSelectedIndexChange = {
-                                                    actions.onToggleSortZygiskFirst()
-                                                    showTopPopup.value = false
-                                                },
-                                                index = 2
-                                            )
-                                            DropdownImpl(
-                                                text = stringResource(R.string.module_sort_webui_first),
-                                                optionSize = 8,
-                                                isSelected = uiState.sortWebUiFirst,
-                                                onSelectedIndexChange = {
-                                                    actions.onToggleSortWebUiFirst()
-                                                    showTopPopup.value = false
-                                                },
-                                                index = 3
-                                            )
-                                            DropdownImpl(
                                                 text = stringResource(R.string.module_sort_action_first),
-                                                optionSize = 8,
+                                                optionSize = 2,
                                                 isSelected = uiState.sortActionFirst,
                                                 onSelectedIndexChange = {
                                                     actions.onToggleSortActionFirst()
                                                     showTopPopup.value = false
                                                 },
-                                                index = 4
+                                                index = 0
                                             )
                                             DropdownImpl(
-                                                text = stringResource(R.string.module_sort_name_asc),
-                                                optionSize = 8,
-                                                isSelected = uiState.sortNameOrder == ModuleNameSort.ASCENDING,
+                                                text = stringResource(R.string.module_sort_enabled_first),
+                                                optionSize = 2,
+                                                isSelected = uiState.sortEnabledFirst,
                                                 onSelectedIndexChange = {
-                                                    actions.onSetSortNameOrder(ModuleNameSort.ASCENDING)
+                                                    actions.onToggleSortEnabledFirst()
                                                     showTopPopup.value = false
                                                 },
-                                                index = 5
-                                            )
-                                            DropdownImpl(
-                                                text = stringResource(R.string.module_sort_name_desc),
-                                                optionSize = 8,
-                                                isSelected = uiState.sortNameOrder == ModuleNameSort.DESCENDING,
-                                                onSelectedIndexChange = {
-                                                    actions.onSetSortNameOrder(ModuleNameSort.DESCENDING)
-                                                    showTopPopup.value = false
-                                                },
-                                                index = 6
-                                            )
-                                            DropdownImpl(
-                                                text = stringResource(R.string.module_sort_manual),
-                                                optionSize = 8,
-                                                isSelected = uiState.sortManual,
-                                                onSelectedIndexChange = {
-                                                    actions.onToggleSortManual()
-                                                    showTopPopup.value = false
-                                                },
-                                                index = 7
+                                                index = 1
                                             )
                                         }
                                     }
@@ -473,12 +401,10 @@ fun ModulePagerMiuix(
                         .border(0.05.dp, colorScheme.outline.copy(alpha = 0.5f), CircleShape),
                     shadowElevation = 0.dp,
                     onClick = {
-                        // Write access lets the manager delete the picked ZIP after a successful install
-                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                            addCategory(Intent.CATEGORY_OPENABLE)
+                        // Select the zip files to install
+                        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
                             type = "application/zip"
                             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
                         }
                         selectZipLauncher.launch(intent)
                     },
@@ -508,7 +434,6 @@ fun ModulePagerMiuix(
                     updateInfoMap = uiState.updateInfo,
                     actions = actions,
                     onModuleAddShortcut = ::onModuleAddShortcut,
-                    onShowInfo = { infoModuleId = it.id },
                     contentPadding = PaddingValues(
                         top = 6.dp,
                         start = 0.dp,
@@ -543,7 +468,7 @@ fun ModulePagerMiuix(
                     textAlign = TextAlign.Center,
                 )
             }
-            return@AppScaffold
+            return@Scaffold
         }
         val layoutDirection = LocalLayoutDirection.current
         searchStatus.SearchBox {
@@ -588,7 +513,7 @@ fun ModulePagerMiuix(
                             Text(
                                 stringResource(R.string.module_empty),
                                 textAlign = TextAlign.Center,
-                                color = colorScheme.onSurfaceVariantSummary,
+                                color = Color.Gray,
                             )
                         }
                     }
@@ -599,11 +524,6 @@ fun ModulePagerMiuix(
                         listState,
                         uiState.sortEnabledFirst,
                         uiState.sortActionFirst,
-                        uiState.sortWebUiFirst,
-                        uiState.sortZygiskFirst,
-                        uiState.sortMetamoduleFirst,
-                        uiState.sortNameOrder,
-                        uiState.sortManual,
                         refreshTick.intValue,
                         isBusy = { latestRefreshing.value },
                     ) { latestModules.value }
@@ -620,15 +540,8 @@ fun ModulePagerMiuix(
                             onModuleAddShortcut = { module, type ->
                                 onModuleAddShortcut(module, type)
                             },
-                            onShowInfo = { infoModuleId = it.id },
                             contentPadding = contentPadding,
                             listState = listState,
-                            reorderEnabled = uiState.sortManual,
-                            summary = if (uiState.moduleList.isEmpty()) null else stringResource(
-                                R.string.module_summary,
-                                uiState.moduleList.count { it.enabled },
-                                uiState.updateInfo.count { it.value.downloadUrl.isNotBlank() },
-                            ),
                         )
                     }
                 }
@@ -649,16 +562,6 @@ fun ModulePagerMiuix(
             showShortcutDialog.value = false
         },
     )
-
-    val infoModule = infoModuleId?.let { id -> uiState.modules.firstOrNull { it.id == id } }
-    if (infoModule != null) {
-        ModuleInfoDialogMiuix(
-            module = infoModule,
-            updateInfo = uiState.updateInfo[infoModule.id],
-            onDismiss = { infoModuleId = null },
-            onBannerChanged = actions.onReloadModules,
-        )
-    }
 }
 
 @Composable
@@ -673,11 +576,10 @@ private fun ModuleShortcutDialog(
     val context = LocalContext.current
     val resources = LocalResources.current
 
-    @Suppress("UsePropertyAccessSyntax")
     fun copyShortcutUrl() {
         val url = shortcutState.buildShortcutUrl() ?: return
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("SukiSU deep link", url))
+        clipboard.setPrimaryClip(ClipData.newPlainText("KernelSU deep link", url))
         Toast.makeText(context, resources.getString(R.string.module_shortcut_scheme_copied), Toast.LENGTH_SHORT).show()
     }
 
@@ -791,38 +693,17 @@ private fun ModuleList(
     updateInfoMap: Map<String, ModuleUpdateInfo>,
     actions: ModuleActions,
     onModuleAddShortcut: (Module, ShortcutType) -> Unit,
-    onShowInfo: (Module) -> Unit,
     contentPadding: PaddingValues,
     listState: LazyListState = rememberLazyListState(),
-    reorderEnabled: Boolean = false,
-    summary: String? = null,
 ) {
     val loadingDialog = rememberLoadingDialog()
     val scope = rememberCoroutineScope()
-    val haptic = LocalHapticFeedback.current
-    val reorderableState = rememberReorderableLazyListState(listState) { from, to ->
-        val fromModule = modules.firstOrNull { it.id == from.key }
-        val toModule = modules.firstOrNull { it.id == to.key }
-        if (fromModule != null && toModule != null) {
-            actions.onMoveModule(fromModule, toModule)
-        }
-    }
     LazyColumn(
         state = listState,
         modifier = modifier.fillMaxHeight(),
         contentPadding = contentPadding,
         overscrollEffect = null,
     ) {
-        if (summary != null) {
-            item(key = "summary", contentType = "summary") {
-                Text(
-                    text = summary,
-                    modifier = Modifier.padding(start = 28.dp, end = 16.dp, bottom = 10.dp),
-                    fontSize = 14.sp,
-                    color = colorScheme.onSurfaceVariantSummary,
-                )
-            }
-        }
         items(
             items = modules,
             key = { it.id },
@@ -830,12 +711,7 @@ private fun ModuleList(
         ) { module ->
             val currentModuleState = rememberUpdatedState(module)
             val moduleUpdateInfo = updateInfoMap[module.id] ?: ModuleUpdateInfo.Empty
-
-            ReorderableItem(
-                state = reorderableState,
-                key = module.id,
-                enabled = reorderEnabled,
-            ) { _ ->
+            val content: @Composable () -> Unit = {
                 ModuleItem(
                     module = module,
                     updateUrl = moduleUpdateInfo.downloadUrl,
@@ -867,34 +743,20 @@ private fun ModuleList(
                     onAddActionShortcut = { type: ShortcutType ->
                         onModuleAddShortcut(currentModuleState.value, type)
                     },
-                    onShowInfo = {
-                        onShowInfo(currentModuleState.value)
-                    },
                     onOpenWebUi = {
                         if (module.hasWebUi) {
                             actions.onOpenWebUi(module)
                         }
-                    },
-                    dragHandleModifier = if (reorderEnabled) {
-                        Modifier.draggableHandle(
-                            onDragStarted = {
-                                haptic.performHapticFeedback(HapticFeedbackType.VirtualKey)
-                            },
-                            onDragStopped = {
-                                actions.onCommitManualOrder()
-                            },
-                        )
-                    } else {
-                        null
-                    },
+                    }
                 )
             }
+
+            content()
         }
     }
 }
 
-// Deliberately not called "modifier": it targets the drag handle, not the card root.
-@Suppress("ModifierParameter")
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ModuleItem(
     module: Module,
@@ -905,9 +767,7 @@ fun ModuleItem(
     onUpdate: () -> Unit,
     onExecuteAction: () -> Unit,
     onAddActionShortcut: (ShortcutType) -> Unit,
-    onOpenWebUi: () -> Unit,
-    onShowInfo: () -> Unit,
-    dragHandleModifier: Modifier? = null,
+    onOpenWebUi: () -> Unit
 ) {
     val secondaryContainer = colorScheme.secondaryContainer.copy(alpha = 0.8f)
     val actionIconTint = colorScheme.onSurface.copy(alpha = if (isInDarkTheme()) 0.7f else 0.9f)
@@ -918,341 +778,295 @@ fun ModuleItem(
     val hasDescription = module.description.isNotBlank()
     val maxLinesLimit = LocalModuleDescriptionMaxLines.current
     var expanded by rememberSaveable(module.id) { mutableStateOf(false) }
-    val dragHandleInteractionSource = remember { MutableInteractionSource() }
-    val banner = rememberModuleBanner(module.id, module.bannerPath)
 
-    AppCard(
+    Card(
         modifier = Modifier
             .padding(horizontal = 12.dp)
             .padding(bottom = 12.dp),
-        insideMargin = PaddingValues(0.dp),
-        colors = backgroundAwareCardColors(),
-        onClick = {
-            if (hasDescription) expanded = !expanded
-        },
-        onLongPress = onShowInfo,
+        insideMargin = PaddingValues(16.dp),
+        onClick = if (hasDescription) {
+            { expanded = !expanded }
+        } else null
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .alpha(if (module.enabled || module.remove) 1f else 0.6f)
-                .moduleBanner(banner, colorScheme.surfaceContainer)
-                .padding(16.dp)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 4.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(end = 4.dp)
-                ) {
-                    SubcomposeLayout { constraints ->
-                        val spacingPx = 6.dp.roundToPx()
-                        var nameTextLayout: TextLayoutResult? = null
-                        val tagsPlaceable = if (module.metamodule || module.zygisk || module.suppressedByBuiltin) {
-                            subcompose("tags") {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    if (module.metamodule) {
-                                        Text(
-                                            text = "META",
-                                            fontSize = 12.sp,
-                                            color = updateTint,
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(updateBg)
-                                                .padding(horizontal = 6.dp, vertical = 2.dp),
-                                            fontWeight = FontWeight(750),
-                                            maxLines = 1,
-                                            softWrap = false
-                                        )
-                                    }
-                                    if (module.zygisk) {
-                                        Text(
-                                            text = "ZYGISK",
-                                            fontSize = 12.sp,
-                                            color = updateTint,
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(updateBg)
-                                                .padding(horizontal = 6.dp, vertical = 2.dp),
-                                            fontWeight = FontWeight(750),
-                                            maxLines = 1,
-                                            softWrap = false
-                                        )
-                                    }
-                                    if (module.suppressedByBuiltin) {
-                                        Text(
-                                            text = stringResource(R.string.module_suppressed_by_builtin),
-                                            fontSize = 12.sp,
-                                            color = updateTint,
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(updateBg)
-                                                .padding(horizontal = 6.dp, vertical = 2.dp),
-                                            fontWeight = FontWeight(750),
-                                            maxLines = 1,
-                                            softWrap = false
-                                        )
-                                    }
+                val moduleVersion = stringResource(id = R.string.module_version)
+                val moduleAuthor = stringResource(id = R.string.module_author)
+
+                SubcomposeLayout { constraints ->
+                    val spacingPx = 6.dp.roundToPx()
+                    var nameTextLayout: TextLayoutResult? = null
+                    val tagsPlaceable = if (module.metamodule || module.zygisk) {
+                        subcompose("tags") {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (module.metamodule) {
+                                    Text(
+                                        text = "META",
+                                        fontSize = 12.sp,
+                                        color = updateTint,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(updateBg)
+                                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                                        fontWeight = FontWeight(750),
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
                                 }
-                            }.first().measure(Constraints(0, constraints.maxWidth, 0, constraints.maxHeight))
-                        } else null
+                                if (module.zygisk) {
+                                    Text(
+                                        text = "ZYGISK",
+                                        fontSize = 12.sp,
+                                        color = updateTint,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(updateBg)
+                                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                                        fontWeight = FontWeight(750),
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+                            }
+                        }.first().measure(Constraints(0, constraints.maxWidth, 0, constraints.maxHeight))
+                    } else null
 
-                        val reserved = (tagsPlaceable?.width ?: 0) + if (tagsPlaceable != null) spacingPx else 0
-                        val nameMax = (constraints.maxWidth - reserved).coerceAtLeast(0)
-                        val namePlaceable = subcompose("name") {
-                            Text(
-                                text = module.name,
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight(550),
-                                color = colorScheme.onSurface,
-                                textDecoration = textDecoration,
-                                onTextLayout = { nameTextLayout = it }
-                            )
-                        }.first().measure(Constraints(constraints.minWidth, nameMax, constraints.minHeight, constraints.maxHeight))
-
-                        val width = (namePlaceable.width + reserved).coerceIn(constraints.minWidth, constraints.maxWidth)
-                        val height = maxOf(namePlaceable.height, tagsPlaceable?.height ?: 0)
-
-                        layout(width, height) {
-                            namePlaceable.placeRelative(0, 0)
-                            val endX = nameTextLayout?.let { layoutRes ->
-                                val last = (layoutRes.lineCount - 1).coerceAtLeast(0)
-                                layoutRes.getLineRight(last).toInt()
-                            } ?: namePlaceable.width
-                            tagsPlaceable?.placeRelative(endX + spacingPx, (height - (tagsPlaceable.height)) / 2)
-                        }
-                    }
-                    Text(
-                        text = "${module.version}, ${module.author}",
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(top = 2.dp, bottom = 1.dp),
-                        fontFamily = FontFamily.Monospace,
-                        color = colorScheme.onSurfaceVariantSummary,
-                        textDecoration = textDecoration
-                    )
-                    module.preinitWarning()?.let {
+                    val reserved = (tagsPlaceable?.width ?: 0) + if (tagsPlaceable != null) spacingPx else 0
+                    val nameMax = (constraints.maxWidth - reserved).coerceAtLeast(0)
+                    val namePlaceable = subcompose("name") {
                         Text(
-                            text = stringResource(it),
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(bottom = 1.dp),
+                            text = module.name,
+                            fontSize = 17.sp,
                             fontWeight = FontWeight(550),
-                            color = colorScheme.error
+                            color = colorScheme.onSurface,
+                            textDecoration = textDecoration,
+                            onTextLayout = { nameTextLayout = it }
                         )
+                    }.first().measure(Constraints(constraints.minWidth, nameMax, constraints.minHeight, constraints.maxHeight))
+
+                    val width = (namePlaceable.width + reserved).coerceIn(constraints.minWidth, constraints.maxWidth)
+                    val height = maxOf(namePlaceable.height, tagsPlaceable?.height ?: 0)
+
+                    layout(width, height) {
+                        namePlaceable.placeRelative(0, 0)
+                        val endX = nameTextLayout?.let { layoutRes ->
+                            val last = (layoutRes.lineCount - 1).coerceAtLeast(0)
+                            layoutRes.getLineRight(last).toInt()
+                        } ?: namePlaceable.width
+                        tagsPlaceable?.placeRelative(endX + spacingPx, (height - (tagsPlaceable.height)) / 2)
                     }
                 }
-                Switch(
-                    enabled = !module.update,
-                    checked = module.enabled,
-                    onCheckedChange = {
-                        if (it != module.enabled) onCheckChanged(it)
-                    }
+                Text(
+                    text = "$moduleVersion: ${module.version}",
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 2.dp),
+                    fontWeight = FontWeight(550),
+                    color = colorScheme.onSurfaceVariantSummary,
+                    textDecoration = textDecoration
                 )
-
-                if (dragHandleModifier != null) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .then(dragHandleModifier)
-                            .clickable(
-                                interactionSource = dragHandleInteractionSource,
-                                indication = null,
-                                onClick = {},
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.DragHandle,
-                            tint = colorScheme.onSurfaceVariantSummary,
-                            contentDescription = stringResource(R.string.module_sort_manual_drag),
-                            modifier = Modifier.size(24.dp),
-                        )
-                    }
-                }
-            }
-
-            if (hasDescription) {
-                ExpandableDescriptionText(
-                    text = module.description,
-                    expanded = expanded,
-                    maxLinesLimit = maxLinesLimit,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 2.dp),
-                    fontSize = 14.sp,
+                Text(
+                    text = "$moduleAuthor: ${module.author}",
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(bottom = 1.dp),
+                    fontWeight = FontWeight(550),
                     color = colorScheme.onSurfaceVariantSummary,
                     textDecoration = textDecoration
                 )
             }
-
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 8.dp),
-                thickness = 0.5.dp,
-                color = colorScheme.outline.copy(alpha = 0.5f)
-            )
-
-            Row {
-                AnimatedVisibility(
-                    visible = module.enabled && !module.remove && !module.update,
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (module.hasActionScript) {
-                            Row(
-                                modifier = Modifier
-                                    .heightIn(min = 35.dp)
-                                    .widthIn(min = 35.dp)
-                                    .clip(CircleShape)
-                                    .background(secondaryContainer)
-                                    .combinedClickable(
-                                        onClick = onExecuteAction,
-                                        onLongClick = { onAddActionShortcut(ShortcutType.Action) }
-                                    )
-                                    .padding(
-                                        start = if (!module.hasWebUi && !hasUpdate) 6.dp else 0.dp,
-                                        end = if (!module.hasWebUi && !hasUpdate) 8.dp else 0.dp,
-                                    ),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Icon(
-                                    modifier = Modifier.size(24.dp),
-                                    imageVector = Icons.Rounded.PlayArrow,
-                                    tint = actionIconTint,
-                                    contentDescription = stringResource(R.string.action)
-                                )
-                                if (!module.hasWebUi && !hasUpdate) {
-                                    Text(
-                                        modifier = Modifier.padding(start = 3.dp, end = 4.dp),
-                                        text = stringResource(R.string.action),
-                                        color = actionIconTint,
-                                        fontWeight = FontWeight.Medium,
-                                        fontSize = 15.sp,
-                                    )
-                                }
-                            }
-                        }
-                        if (module.hasWebUi) {
-                            Row(
-                                modifier = Modifier
-                                    .heightIn(min = 35.dp)
-                                    .widthIn(min = 35.dp)
-                                    .clip(CircleShape)
-                                    .background(secondaryContainer)
-                                    .combinedClickable(
-                                        onClick = onOpenWebUi,
-                                        onLongClick = { onAddActionShortcut(ShortcutType.WebUI) }
-                                    )
-                                    .padding(horizontal = if (!module.hasActionScript && !hasUpdate) 10.dp else 0.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Icon(
-                                    modifier = Modifier.size(22.dp),
-                                    imageVector = Icons.Rounded.Code,
-                                    tint = actionIconTint,
-                                    contentDescription = stringResource(R.string.open)
-                                )
-                                if (!module.hasActionScript && !hasUpdate) {
-                                    Text(
-                                        modifier = Modifier.padding(start = 4.dp, end = 2.dp),
-                                        text = stringResource(R.string.open),
-                                        color = actionIconTint,
-                                        fontWeight = FontWeight.Medium,
-                                        fontSize = 15.sp,
-                                    )
-                                }
-                            }
-                        }
-                    }
+            Switch(
+                enabled = !module.update,
+                checked = module.enabled,
+                onCheckedChange = {
+                    if (it != module.enabled) onCheckChanged(it)
                 }
+            )
+        }
 
-                Spacer(Modifier.weight(1f))
+        if (hasDescription) {
+            ExpandableDescriptionText(
+                text = module.description,
+                expanded = expanded,
+                maxLinesLimit = maxLinesLimit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp),
+                fontSize = 14.sp,
+                color = colorScheme.onSurfaceVariantSummary,
+                textDecoration = textDecoration
+            )
+        }
 
-                AnimatedVisibility(
-                    visible = hasUpdate,
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    IconButton(
-                        modifier = Modifier.padding(end = 8.dp),
-                        backgroundColor = updateBg,
-                        enabled = !module.remove,
-                        minHeight = 35.dp,
-                        minWidth = 35.dp,
-                        onClick = onUpdate,
-                    ) {
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 8.dp),
+            thickness = 0.5.dp,
+            color = colorScheme.outline.copy(alpha = 0.5f)
+        )
+
+        Row {
+            AnimatedVisibility(
+                visible = module.enabled && !module.remove && !module.update,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (module.hasActionScript) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 10.dp),
+                            modifier = Modifier
+                                .heightIn(min = 35.dp)
+                                .widthIn(min = 35.dp)
+                                .clip(CircleShape)
+                                .background(secondaryContainer)
+                                .combinedClickable(
+                                    onClick = onExecuteAction,
+                                    onLongClick = { onAddActionShortcut(ShortcutType.Action) }
+                                )
+                                .padding(
+                                    start = if (!module.hasWebUi && !hasUpdate) 6.dp else 0.dp,
+                                    end = if (!module.hasWebUi && !hasUpdate) 8.dp else 0.dp,
+                                ),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
-                                modifier = Modifier.size(20.dp),
-                                imageVector = MiuixIcons.UploadCloud,
-                                tint = updateTint,
-                                contentDescription = stringResource(R.string.module_update),
+                                modifier = Modifier.size(24.dp),
+                                imageVector = Icons.Rounded.PlayArrow,
+                                tint = actionIconTint,
+                                contentDescription = stringResource(R.string.action)
                             )
-                            Text(
-                                modifier = Modifier.padding(start = 4.dp, end = 3.dp),
-                                text = stringResource(R.string.module_update),
-                                color = updateTint,
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 15.sp
+                            if (!module.hasWebUi && !hasUpdate) {
+                                Text(
+                                    modifier = Modifier.padding(start = 3.dp, end = 4.dp),
+                                    text = stringResource(R.string.action),
+                                    color = actionIconTint,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 15.sp,
+                                )
+                            }
+                        }
+                    }
+                    if (module.hasWebUi) {
+                        Row(
+                            modifier = Modifier
+                                .heightIn(min = 35.dp)
+                                .widthIn(min = 35.dp)
+                                .clip(CircleShape)
+                                .background(secondaryContainer)
+                                .combinedClickable(
+                                    onClick = onOpenWebUi,
+                                    onLongClick = { onAddActionShortcut(ShortcutType.WebUI) }
+                                )
+                                .padding(horizontal = if (!module.hasActionScript && !hasUpdate) 10.dp else 0.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                modifier = Modifier.size(22.dp),
+                                imageVector = Icons.Rounded.Code,
+                                tint = actionIconTint,
+                                contentDescription = stringResource(R.string.open)
                             )
+                            if (!module.hasActionScript && !hasUpdate) {
+                                Text(
+                                    modifier = Modifier.padding(start = 4.dp, end = 2.dp),
+                                    text = stringResource(R.string.open),
+                                    color = actionIconTint,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 15.sp,
+                                )
+                            }
                         }
                     }
                 }
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            AnimatedVisibility(
+                visible = hasUpdate,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
                 IconButton(
+                    modifier = Modifier.padding(end = 8.dp),
+                    backgroundColor = updateBg,
+                    enabled = !module.remove,
                     minHeight = 35.dp,
                     minWidth = 35.dp,
-                    onClick = if (module.remove) onUndoUninstall else onUninstall,
-                    backgroundColor = if (module.remove) {
-                        secondaryContainer.copy(alpha = 0.8f)
-                    } else {
-                        secondaryContainer
-                    },
+                    onClick = onUpdate,
                 ) {
-                    val animatedPadding by animateDpAsState(
-                        targetValue = if (!hasUpdate) 10.dp else 0.dp,
-                        animationSpec = tween(durationMillis = 300)
-                    )
                     Row(
-                        modifier = Modifier.padding(horizontal = animatedPadding),
+                        modifier = Modifier.padding(horizontal = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         Icon(
                             modifier = Modifier.size(20.dp),
-                            imageVector = if (module.remove) {
-                                MiuixIcons.Undo
-                            } else {
-                                MiuixIcons.Delete
-                            },
-                            tint = actionIconTint,
-                            contentDescription = null
+                            imageVector = MiuixIcons.UploadCloud,
+                            tint = updateTint,
+                            contentDescription = stringResource(R.string.module_update),
                         )
-                        AnimatedVisibility(
-                            visible = !hasUpdate,
-                            enter = expandHorizontally(),
-                            exit = shrinkHorizontally()
-                        ) {
-                            Text(
-                                modifier = Modifier.padding(start = 4.dp, end = 3.dp),
-                                text = stringResource(
-                                    if (module.remove) R.string.undo else R.string.uninstall
-                                ),
-                                color = actionIconTint,
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 15.sp
-                            )
-                        }
+                        Text(
+                            modifier = Modifier.padding(start = 4.dp, end = 3.dp),
+                            text = stringResource(R.string.module_update),
+                            color = updateTint,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 15.sp
+                        )
+                    }
+                }
+            }
+            IconButton(
+                minHeight = 35.dp,
+                minWidth = 35.dp,
+                onClick = if (module.remove) onUndoUninstall else onUninstall,
+                backgroundColor = if (module.remove) {
+                    secondaryContainer.copy(alpha = 0.8f)
+                } else {
+                    secondaryContainer
+                },
+            ) {
+                val animatedPadding by animateDpAsState(
+                    targetValue = if (!hasUpdate) 10.dp else 0.dp,
+                    animationSpec = tween(durationMillis = 300)
+                )
+                Row(
+                    modifier = Modifier.padding(horizontal = animatedPadding),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        modifier = Modifier.size(20.dp),
+                        imageVector = if (module.remove) {
+                            MiuixIcons.Undo
+                        } else {
+                            MiuixIcons.Delete
+                        },
+                        tint = actionIconTint,
+                        contentDescription = null
+                    )
+                    AnimatedVisibility(
+                        visible = !hasUpdate,
+                        enter = expandHorizontally(),
+                        exit = shrinkHorizontally()
+                    ) {
+                        Text(
+                            modifier = Modifier.padding(start = 4.dp, end = 3.dp),
+                            text = stringResource(
+                                if (module.remove) R.string.undo else R.string.uninstall
+                            ),
+                            color = actionIconTint,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 15.sp
+                        )
                     }
                 }
             }

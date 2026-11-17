@@ -23,8 +23,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
-import com.iki.xlh.ui.util.customText
-import com.iki.xlh.ui.util.CustomTextKey
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -67,20 +65,18 @@ import com.iki.xlh.R
 import com.iki.xlh.ui.component.ListPopupDefaults
 import com.iki.xlh.ui.component.ScrollToTopOnChange
 import com.iki.xlh.ui.component.SearchStatus
-import com.iki.xlh.ui.component.miuix.AppCard
-import com.iki.xlh.ui.component.miuix.AppScaffold
 import com.iki.xlh.ui.component.miuix.SearchBarFake
 import com.iki.xlh.ui.component.miuix.SearchBox
 import com.iki.xlh.ui.component.miuix.SearchPager
 import com.iki.xlh.ui.component.miuix.WarningCard
 import com.iki.xlh.ui.component.statustag.StatusTag
-import com.iki.xlh.ui.theme.LocalBackgroundImagePath
 import com.iki.xlh.ui.theme.LocalEnableBlur
 import com.iki.xlh.ui.util.BlurredBar
 import com.iki.xlh.ui.util.SulogEntry
 import com.iki.xlh.ui.util.SulogEventFilter
 import com.iki.xlh.ui.util.rememberBlurBackdrop
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -88,6 +84,7 @@ import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 import top.yukonga.miuix.kmp.basic.PullToRefresh
+import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
@@ -119,8 +116,7 @@ fun SulogScreenMiuix(
     }
     val backdrop = rememberBlurBackdrop(enableBlur)
     val blurActive = backdrop != null
-    val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
-    val barColor = if (blurActive || hasCustomBackground) Color.Transparent else colorScheme.surface
+    val barColor = if (blurActive) Color.Transparent else colorScheme.surface
     val pullToRefreshState = rememberPullToRefreshState()
     val listState = rememberLazyListState()
     val fileSelector = buildSulogFileSelector(state.files, state.selectedFilePath)
@@ -153,13 +149,13 @@ fun SulogScreenMiuix(
         onDismiss = { selectedEntry = null },
     )
 
-    AppScaffold(
+    Scaffold(
         topBar = {
             BlurredBar(backdrop) {
                 searchStatus.TopAppBarAnim(backgroundColor = barColor) {
                     TopAppBar(
                         color = barColor,
-                        title = customText(CustomTextKey.PAGE_SULOG),
+                        title = stringResource(R.string.settings_sulog),
                         navigationIcon = {
                             IconButton(
                                 onClick = actions.onBack,
@@ -322,7 +318,7 @@ fun SulogScreenMiuix(
                         }
 
                         item {
-                            AppCard(
+                            Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 12.dp)
@@ -401,7 +397,7 @@ private fun SulogStatusSection(
                 )
             }
 
-            "supported" if true -> {
+            "supported" if !state.isSulogEnabled -> {
                 WarningCard(
                     message = stringResource(R.string.sulog_disabled_title),
                     action = {
@@ -439,7 +435,7 @@ private fun LazyListScope.sulogEntriesSection(
             )
         }
 
-        else -> itemsIndexed(entries, key = { index, entry -> "$index-${entry.key}" }) { _, entry ->
+        else -> itemsIndexed(entries, key = { index, entry -> "$index-${entry.key}" }) { index, entry ->
             SulogEntryCard(
                 entry = entry,
                 onClick = { onEntryClick(entry) },
@@ -453,7 +449,7 @@ private fun SulogEntryCard(
     entry: SulogEntry,
     onClick: () -> Unit,
 ) {
-    AppCard(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)

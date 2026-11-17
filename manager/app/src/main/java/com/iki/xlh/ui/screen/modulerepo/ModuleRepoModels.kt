@@ -9,7 +9,7 @@ data class AuthorArg(
     val link: String,
 ) : Parcelable
 
-
+/** Navigation argument: the list entry a detail page was opened from. */
 @Parcelize
 data class RepoModuleArg(
     val moduleId: String,
@@ -20,5 +20,4 @@ data class RepoModuleArg(
     val latestVersionCode: Int,
     val latestReleaseTime: String,
     val metamodule: Boolean,
-    val script: Boolean = false,
 ) : Parcelable

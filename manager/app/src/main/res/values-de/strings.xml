@@ -13,12 +13,12 @@
     <string name="reboot_download">In den Download-Modus neustarten</string>
     <string name="reboot_edl">In den EDL-Modus neustarten</string>
     <string name="module_author">Autor</string>
-    <string name="about">Über SukiSU</string>
+    <string name="about">Über 🐾星棱狐🐾</string>
     <string name="module_magisk_conflict">Module sind aufgrund eines Konfliktes mit Magisk nicht verfügbar!</string>
-    <string name="home_learn_kernelsu_url">https://sukisu.org/guide/</string>
-    <string name="home_click_to_learn_kernelsu">Erfahre, wie SukiSU installiert wird und wie Module verwendet werden.</string>
+    <string name="home_learn_kernelsu_url">https://kernelsu.org/guide/what-is-kernelsu.html</string>
+    <string name="home_click_to_learn_kernelsu">Erfahre, wie 🐾星棱狐🐾 installiert wird und wie Module verwendet werden.</string>
     <string name="home_support_title">Unterstütze uns</string>
-    <string name="home_support_content">SukiSU ist und wird immer frei und quelloffen sein. Du kannst uns jedoch deine Unterstützung zeigen, indem du eine Spende tätigst.</string>
+    <string name="home_support_content">🐾星棱狐🐾 ist und wird immer frei und quelloffen sein. Du kannst uns jedoch deine Unterstützung zeigen, indem du eine Spende tätigst.</string>
     <string name="profile_selinux_context">SELinux-Kontext</string>
     <string name="settings_umount_modules_default">Module standardmäßig aushängen</string>
     <string name="settings_umount_modules_default_summary">Globaler Standardwert für \"Module aushängen\" im App-Profil. Falls er aktiviert ist, werden alle Moduländerungen im System für alle Apps entfernt, für die kein Profil festgelegt ist.</string>
@@ -31,7 +31,7 @@
     <string name="profile_namespace_individual">Individuell</string>
     <string name="profile_selinux_domain">Domäne</string>
     <string name="module_update">Aktualisieren</string>
-    <string name="profile_umount_modules_summary">Wenn du diese Option aktivierst, kann SukiSU alle von den Modulen für diese App geänderten Dateien wiederherstellen.</string>
+    <string name="profile_umount_modules_summary">Wenn du diese Option aktivierst, kann 🐾星棱狐🐾 alle von den Modulen für diese App geänderten Dateien wiederherstellen.</string>
     <string name="profile_selinux_rules">Regeln</string>
     <string name="module_start_downloading">Starte Download: %s</string>
     <string name="failed_to_update_sepolicy">Aktualisieren der SELinux-Regeln schlug fehl für %s</string>
@@ -55,7 +55,7 @@
     <string name="module_version">Version</string>
     <string name="show_system_apps">System-Apps anzeigen</string>
     <string name="send_log">Protokoll senden</string>
-    <string name="home_learn_kernelsu">SukiSU verstehen</string>
+    <string name="home_learn_kernelsu">🐾星棱狐🐾 verstehen</string>
     <string name="safe_mode">Sicherer Modus</string>
     <string name="reboot_to_apply">Neustarten, damit Änderungen wirksam werden</string>
     <string name="about_source_code"><![CDATA[Quellcode einsehen unter %1$s<br/>Unserem %2$s-Kanal beitreten]]></string>
@@ -66,7 +66,7 @@
     <string name="profile_umount_modules">Module aushängen</string>
     <string name="module_downloading">Lädt Modul %s herunter</string>
     <string name="home_unsupported">Nicht unterstützt</string>
-    <string name="home_unsupported_reason">SukiSU unterstützt derzeit nur GKI-Kernel.</string>
+    <string name="home_unsupported_reason">🐾星棱狐🐾 unterstützt derzeit nur GKI-Kernel.</string>
     <string name="home_kernel">Kernelversion</string>
     <string name="home_fingerprint">Fingerabdruck</string>
     <string name="module_install">Installieren</string>
@@ -120,12 +120,12 @@
     <string name="settings_check_update_summary">Prüfe automatisch auf Aktualisierungen, wenn die App geöffnet wird.</string>
     <string name="settings_uninstall_temporary">Temporär deinstallieren</string>
     <string name="settings_uninstall">Deinstallieren</string>
-    <string name="settings_uninstall_permanent_message">SukiSU (Root und alle Module) vollständig und dauerhaft deinstallieren.</string>
+    <string name="settings_uninstall_permanent_message">🐾星棱狐🐾 (Root und alle Module) vollständig und dauerhaft deinstallieren.</string>
     <string name="save_log">Protokolle Speichern</string>
     <string name="settings_uninstall_permanent">Permanent deinstallieren</string>
     <string name="settings_restore_stock_image">Standard-Abbild wiederherstellen</string>
-    <string name="settings_uninstall_temporary_message">SukiSU temporär deinstallieren, originalen Status nach dem nächsten Neustart wiederherstellen.</string>
-    <string name="settings_restore_stock_image_message">Das Standard Werksabbild wiederherstellen (falls ein Backup existiert), normalerweise vor einem OTA zu verwenden; falls Sie SukiSU deinstallieren müssen, nutzen Sie bitte \"Permanent deinstallieren\".</string>
+    <string name="settings_uninstall_temporary_message">🐾星棱狐🐾 temporär deinstallieren, originalen Status nach dem nächsten Neustart wiederherstellen.</string>
+    <string name="settings_restore_stock_image_message">Das Standard Werksabbild wiederherstellen (falls ein Backup existiert), normalerweise vor einem OTA zu verwenden; falls Sie 🐾星棱狐🐾 deinstallieren müssen, nutzen Sie bitte \"Permanent deinstallieren\".</string>
     <string name="flashing">Schreibt</string>
     <string name="flash_success">Schreiben erfolgreich</string>
     <string name="flash_failed">Schreiben fehlgeschlagen</string>
@@ -141,6 +141,7 @@
     <string name="module_repos_source_code">Quellcode</string>
     <string name="metamodule_uninstall_confirm">Sind Sie sich sicher, das Modul %s zu deinstallieren? Diese Aktion wirkt sich auf alle Module aus und spezielle Funktionen, welche von dem Metamodul bereitgestellt werden (sowie montieren), werden nicnt mehr funktioneren.</string>
     <string name="safe_mode_module_disabled">Modulinstallation ist im sicheren Modus deaktiviert</string>
+    <string name="home_gki_warning">Ab v3.0.0 wird der GKI Arbeitsmodus nur in Testumgebungen genutzt werden. Wir empfehlen es nicht für die tägliche Nutzung und Bilddateien werden nicht mehr bereitgestellt werden.</string>
     <string name="su_not_allowed">Es konnte für %s keine Superuser-Berechtigung gegeben werden</string>
     <string name="app_profile_affects_following_apps">Wirkt sich auf folgende Apps aus</string>
     <string name="settings_sucompat">Su-Binärdatei umleiten</string>
@@ -149,9 +150,7 @@
     <string name="install_select_partition">Partition wählen</string>
     <string name="install_upload_lkm_file">Nutze lokale LKM Datei</string>
     <string name="install_only_support_ko_file">Nur .ko Dateien unterstützt</string>
-    <string name="profile_flags_desc_no_new_privs">Verhindert eine weitere Rechteausweitung über SukiSU innerhalb dieses Root-Profils.</string>
+    <string name="profile_flags_desc_no_new_privs">Verhindert eine weitere Rechteausweitung über 🐾星棱狐🐾 innerhalb dieses Root-Profils.</string>
     <string name="install_force_backup">Als Original-Image sichern</string>
     <string name="install_force_backup_summary">Bitte stelle sicher, dass das ausgewählte Boot-Image das Original-Image ist</string>
-    <string name="settings_check_ci_update">Auf CI-Aktualisierungen prüfen</string>
-    <string name="settings_check_ci_update_summary">Suche auf der Startseite nach CI-Builds des main-Branches und benachrichtige, wenn ein Update verfügbar ist.</string>
 </resources>

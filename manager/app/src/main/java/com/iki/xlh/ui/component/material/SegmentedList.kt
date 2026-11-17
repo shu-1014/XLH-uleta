@@ -1,12 +1,9 @@
 package com.iki.xlh.ui.component.material
 
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItemColors
 import androidx.compose.material3.ListItemDefaults
@@ -33,12 +31,10 @@ import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SegmentedListItem
-import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -48,8 +44,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -75,14 +69,12 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import androidx.compose.ui.zIndex
-import com.iki.xlh.ui.theme.LocalBackgroundImagePath
-import com.iki.xlh.ui.theme.backgroundAwareColor
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 val LocalListItemShapes = compositionLocalOf<ListItemShapes?> { null }
-private val SegmentedOuterRadius = 24.dp
-private val SegmentedInnerRadius = 6.dp
+private val SegmentedOuterRadius = 16.dp
+private val SegmentedInnerRadius = 4.dp
 private const val SegmentedSpringStiffness = 800f
 private const val SegmentedSpringDamping = 0.9f
 
@@ -90,32 +82,20 @@ private const val SegmentedSpringDamping = 0.9f
 annotation class SegmentedColumnDsl
 
 @Composable
-private fun defaultSegmentedColors(): ListItemColors {
-    val base = ListItemDefaults.segmentedColors(
-        containerColor = backgroundAwareColor(colorScheme.surfaceBright),
-        disabledContainerColor = backgroundAwareColor(colorScheme.surfaceBright),
-        supportingContentColor = colorScheme.onSurfaceVariant
-    )
-    if (LocalBackgroundImagePath.current.isEmpty()) return base
-    // The default disabled foreground is ~38% alpha. On a translucent card above a custom
-    // background that is hard to read, so keep the muted look but raise the contrast.
-    return base.copy(
-        disabledContentColor = colorScheme.onSurface.copy(alpha = 0.85f),
-        disabledLeadingContentColor = colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
-        disabledTrailingContentColor = colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
-        disabledOverlineContentColor = colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
-        disabledSupportingContentColor = colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
-    )
-}
+private fun defaultSegmentedColors(): ListItemColors = ListItemDefaults.segmentedColors(
+    containerColor = colorScheme.surfaceBright,
+    disabledContainerColor = colorScheme.surfaceBright,
+    supportingContentColor = colorScheme.onSurfaceVariant
+)
 
 @Composable
 private fun defaultSingleSegmentedShape(index: Int, count: Int): ListItemShapes {
     val base = ListItemDefaults.segmentedShapes(index, count)
-    val top = if (index == 0) SegmentedOuterRadius else SegmentedInnerRadius
-    val bottom = if (index == count - 1) SegmentedOuterRadius else SegmentedInnerRadius
-    return base.copy(
-        shape = RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom)
-    )
+    return if (count == 1) {
+        base.copy(shape = MaterialTheme.shapes.large)
+    } else {
+        base
+    }
 }
 
 @Composable
@@ -318,50 +298,21 @@ fun SegmentedListItem(
     leadingContent: @Composable (() -> Unit)? = null,
     trailingContent: @Composable (() -> Unit)? = null,
 ) {
-    if (onClick != null) {
-        val resolvedSource = interactionSource ?: remember { MutableInteractionSource() }
-        val pressed by resolvedSource.collectIsPressedAsState()
-        val scale by animateFloatAsState(
-            targetValue = if (pressed) 0.97f else 1f,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessMediumLow,
-            ),
-            label = "SegmentedListItemPressScale",
-        )
-        val haptic = LocalHapticFeedback.current
-        LaunchedEffect(pressed) {
-            if (pressed) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-        }
-        SegmentedListItem(
-            onClick = onClick,
-            onLongClick = onLongClick,
-            enabled = enabled,
-            colors = colors,
-            interactionSource = resolvedSource,
-            shapes = LocalListItemShapes.current ?: ListItemDefaults.segmentedShapes(0, 1),
-            modifier = modifier.scale(scale),
-            leadingContent = leadingContent,
-            trailingContent = trailingContent,
-            overlineContent = overlineContent,
-            supportingContent = supportingContent,
-            verticalAlignment = Alignment.CenterVertically,
-            content = headlineContent
-        )
-    } else {
-        SegmentedListItem(
-            shapes = LocalListItemShapes.current ?: ListItemDefaults.segmentedShapes(0, 1),
-            modifier = modifier,
-            enabled = enabled,
-            colors = colors,
-            leadingContent = leadingContent,
-            trailingContent = trailingContent,
-            overlineContent = overlineContent,
-            supportingContent = supportingContent,
-            verticalAlignment = Alignment.CenterVertically,
-            content = headlineContent
-        )
-    }
+    SegmentedListItem(
+        onClick = onClick ?: {},
+        onLongClick = onLongClick,
+        enabled = enabled,
+        colors = colors,
+        interactionSource = interactionSource,
+        shapes = LocalListItemShapes.current ?: ListItemDefaults.segmentedShapes(0, 1),
+        modifier = modifier,
+        leadingContent = leadingContent,
+        trailingContent = trailingContent,
+        overlineContent = overlineContent,
+        supportingContent = supportingContent,
+        verticalAlignment = Alignment.CenterVertically,
+        content = headlineContent
+    )
 }
 
 @Composable
@@ -431,27 +382,6 @@ fun SegmentedListItem(
 }
 
 @Composable
-fun IconTile(
-    icon: ImageVector,
-    contentDescription: String?,
-) {
-    Box(
-        modifier = Modifier
-            .size(36.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(colorScheme.secondaryContainer),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            modifier = Modifier.size(20.dp),
-            tint = colorScheme.onSecondaryContainer,
-        )
-    }
-}
-
-@Composable
 fun SegmentedSwitchItem(
     icon: ImageVector? = null,
     title: String,
@@ -473,7 +403,7 @@ fun SegmentedSwitchItem(
         interactionSource = interactionSource,
         colors = colors,
         headlineContent = { Text(title) },
-        leadingContent = icon?.let { { IconTile(it, title) } },
+        leadingContent = icon?.let { { Icon(it, title) } },
         trailingContent = {
             ExpressiveSwitch(
                 checked = checked,
@@ -520,7 +450,7 @@ fun SegmentedDropdownItem(
             } else null,
             enabled = enabled,
             colors = colors,
-            leadingContent = icon?.let { { IconTile(it, title) } },
+            leadingContent = icon?.let { { Icon(it, title) } },
             headlineContent = { Text(text = title) },
             supportingContent = summary?.let { { Text(it) } },
             trailingContent = {
@@ -659,7 +589,8 @@ fun SegmentedTextField(
 
     SegmentedListItem(
         modifier = modifier
-            .bringIntoViewRequester(bringIntoViewRequester),
+            .bringIntoViewRequester(bringIntoViewRequester)
+            .focusRequester(focusRequester),
         colors = colors,
         onClick = { focusRequester.requestFocus() },
         leadingContent = leadingContent,

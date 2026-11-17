@@ -6,9 +6,9 @@ import java.io.IOException
 import java.io.InputStream
 import java.security.MessageDigest
 
-
+/** Expected properties of a registry release ZIP. */
 data class ExpectedFile(val size: Long, val sha256: String) {
-    
+    /** Same expectation regardless of hash spelling. */
     fun sameAs(other: ExpectedFile?): Boolean =
         other != null && size == other.size && sha256.equals(other.sha256, ignoreCase = true)
 }
@@ -23,7 +23,8 @@ class DownloadVerificationException(val reason: Reason, message: String) : IOExc
  * vice versa.
  */
 fun canShareDownload(url: String, expected: ExpectedFile?, otherUrl: String, otherExpected: ExpectedFile?): Boolean {
-    return url == otherUrl && expected?.sameAs(otherExpected) ?: (otherExpected == null)
+    if (url != otherUrl) return false
+    return if (expected == null) otherExpected == null else expected.sameAs(otherExpected)
 }
 
 /**
@@ -73,7 +74,7 @@ class DownloadVerifier(private val expected: ExpectedFile) {
     }
 }
 
-
+/** Re-hashes [file] from disk; throws [DownloadVerificationException] on any mismatch. */
 @Throws(IOException::class)
 fun verifyFile(file: File, expected: ExpectedFile) {
     val verifier = DownloadVerifier(expected)
@@ -141,7 +142,7 @@ object RegistryDownloadStore {
         return base.ifEmpty { "module.zip" }
     }
 
-    
+    /** Expected size/hash of [file] if it lives in the store under [root], otherwise null. */
     fun expectedFor(root: File, file: File): ExpectedFile? {
         val canonical = runCatching { file.canonicalFile }.getOrNull() ?: return null
         val parent = canonical.parentFile ?: return null
@@ -194,7 +195,7 @@ object RegistryDownloadStore {
         }
     }
 
-    
+    /** Deletes a stored file (and its directory when empty); false if [file] is not in the store. */
     fun delete(root: File, file: File): Boolean {
         if (expectedFor(root, file) == null) return false
         val canonical = file.canonicalFile

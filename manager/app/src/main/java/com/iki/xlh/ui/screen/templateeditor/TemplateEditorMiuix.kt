@@ -30,17 +30,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.iki.xlh.R
-import com.iki.xlh.ui.component.miuix.AppCard
-import com.iki.xlh.ui.component.miuix.AppScaffold
 import com.iki.xlh.ui.component.miuix.EditText
 import com.iki.xlh.ui.component.profile.RootProfileConfig
-import com.iki.xlh.ui.theme.LocalBackgroundImagePath
 import com.iki.xlh.ui.theme.LocalEnableBlur
 import com.iki.xlh.ui.util.BlurredBar
 import com.iki.xlh.ui.util.rememberBlurBackdrop
+import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
@@ -49,7 +48,6 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.icon.extended.Ok
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -67,27 +65,9 @@ fun TemplateEditorScreenMiuix(
     val enableBlur = LocalEnableBlur.current
     val backdrop = rememberBlurBackdrop(enableBlur)
     val blurActive = backdrop != null
-    val hasCustomBackground = LocalBackgroundImagePath.current.isNotEmpty()
-    val barColor = if (blurActive || hasCustomBackground) Color.Transparent else colorScheme.surface
-    val baseColors = colorScheme
-    // In the read-only viewer every field is disabled for input, but its content must stay
-    // readable. Replace the muted disabled foreground colors with their normal counterparts.
-    //
-    // Do not remember the copy by Colors identity: the theme mutates the same instance, so a
-    // remembered snapshot would keep the palette from before a light/dark or dynamic color change.
-    val viewColors = if (state.readOnly) {
-        baseColors.copy(
-            disabledOnPrimary = baseColors.onPrimary,
-            disabledOnPrimaryButton = baseColors.onPrimary,
-            disabledOnSecondary = baseColors.onSecondary,
-            disabledOnSecondaryVariant = baseColors.onSurface,
-            disabledOnSurface = baseColors.onSurface,
-        )
-    } else {
-        baseColors
-    }
+    val barColor = if (blurActive) Color.Transparent else colorScheme.surface
 
-    AppScaffold(
+    Scaffold(
         topBar = {
             TopBar(
                 title = if (state.isCreation) {
@@ -121,47 +101,45 @@ fun TemplateEditorScreenMiuix(
                 overscrollEffect = null
             ) {
                 item {
-                    AppCard(
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(12.dp),
                     ) {
-                        MiuixTheme(colors = viewColors) {
-                            TextEdit(
-                                label = stringResource(id = R.string.app_profile_template_name),
-                                text = state.template.name,
-                                enabled = !state.readOnly,
-                                onValueChange = actions.onNameChange,
-                            )
+                        TextEdit(
+                            label = stringResource(id = R.string.app_profile_template_name),
+                            text = state.template.name,
+                            enabled = !state.readOnly,
+                            onValueChange = actions.onNameChange,
+                        )
 
-                            TextEdit(
-                                label = stringResource(id = R.string.app_profile_template_id),
-                                text = state.template.id,
-                                isError = state.idErrorHint.isNotEmpty(),
-                                enabled = !state.readOnly,
-                                onValueChange = actions.onIdChange,
-                            )
-                            TextEdit(
-                                label = stringResource(R.string.module_author),
-                                text = state.template.author,
-                                enabled = !state.readOnly,
-                                onValueChange = actions.onAuthorChange,
-                            )
+                        TextEdit(
+                            label = stringResource(id = R.string.app_profile_template_id),
+                            text = state.template.id,
+                            isError = state.idErrorHint.isNotEmpty(),
+                            enabled = !state.readOnly,
+                            onValueChange = actions.onIdChange,
+                        )
+                        TextEdit(
+                            label = stringResource(R.string.module_author),
+                            text = state.template.author,
+                            enabled = !state.readOnly,
+                            onValueChange = actions.onAuthorChange,
+                        )
 
-                            TextEdit(
-                                label = stringResource(id = R.string.app_profile_template_description),
-                                text = state.template.description,
-                                enabled = !state.readOnly,
-                                onValueChange = actions.onDescriptionChange,
-                            )
+                        TextEdit(
+                            label = stringResource(id = R.string.app_profile_template_description),
+                            text = state.template.description,
+                            enabled = !state.readOnly,
+                            onValueChange = actions.onDescriptionChange,
+                        )
 
-                            RootProfileConfig(
-                                fixedName = true,
-                                enabled = !state.readOnly,
-                                profile = toNativeProfile(state.template),
-                                onProfileChange = actions.onProfileChange,
-                            )
-                        }
+                        RootProfileConfig(
+                            fixedName = true,
+                            enabled = !state.readOnly,
+                            profile = toNativeProfile(state.template),
+                            onProfileChange = actions.onProfileChange,
+                        )
                     }
                     Spacer(
                         Modifier.height(

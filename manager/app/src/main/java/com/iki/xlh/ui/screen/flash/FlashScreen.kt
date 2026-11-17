@@ -1,11 +1,8 @@
 package com.iki.xlh.ui.screen.flash
 
-import android.content.Intent
 import android.widget.Toast
-import androidx.activity.compose.LocalActivity
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,14 +25,11 @@ import com.iki.xlh.ui.LocalUiMode
 import com.iki.xlh.ui.UiMode
 import com.iki.xlh.ui.navigation3.LocalNavigator
 import com.iki.xlh.ui.util.reboot
-import kotlinx.coroutines.delay
-import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun FlashScreen(flashIt: FlashIt, onBackEnabledChange: (Boolean) -> Unit) {
     val navigator = LocalNavigator.current
     val context = LocalContext.current
-    val activity = LocalActivity.current
     val scope = rememberCoroutineScope()
     var text by rememberSaveable { mutableStateOf("") }
     val logContent = remember { StringBuilder() }
@@ -75,22 +69,6 @@ fun FlashScreen(flashIt: FlashIt, onBackEnabledChange: (Boolean) -> Unit) {
         onFlashingStatusChange = { flashingStatus = it },
         enabled = flashingEnabled,
     )
-
-    LaunchedEffect(flashingStatus, flashIt) {
-        if (flashingStatus == FlashingStatus.SUCCESS && flashIt is FlashIt.FlashModules) {
-            val intent = activity?.intent
-            val isFromExternalIntent = intent?.action?.let { action ->
-                action == Intent.ACTION_VIEW ||
-                        action == Intent.ACTION_SEND ||
-                        action == Intent.ACTION_SEND_MULTIPLE
-            } ?: false
-
-            if (isFromExternalIntent) {
-                delay(1000.milliseconds)
-                activity.finish()
-            }
-        }
-    }
 
     val state = FlashUiState(
         text = text,

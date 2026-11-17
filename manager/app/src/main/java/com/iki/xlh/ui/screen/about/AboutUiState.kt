@@ -1,25 +1,28 @@
 package com.iki.xlh.ui.screen.about
 
 import androidx.compose.runtime.Immutable
-import com.iki.xlh.ui.util.BuiltinAppIcon
 
 @Immutable
 data class AboutUiState(
     val title: String,
     val appName: String,
     val versionName: String,
-    val icon: BuiltinAppIcon,
-    val links: List<LinkInfo>,
-    val checkUpdate: Boolean = true,
-    val checkCiUpdate: Boolean = false,
-    val checkModuleUpdate: Boolean = true,
+    /**
+     * Contact rows rendered on the About page. These are not links: tapping a
+     * row copies its value to the clipboard instead of leaving the app.
+     */
+    val contacts: List<ContactInfo>,
+)
+
+@Immutable
+data class ContactInfo(
+    val title: String,
+    val value: String,
+    val summary: String,
 )
 
 @Immutable
 data class AboutScreenActions(
     val onBack: () -> Unit,
-    val onOpenLink: (String) -> Unit,
-    val onSetCheckUpdate: (Boolean) -> Unit = {},
-    val onSetCheckCiUpdate: (Boolean) -> Unit = {},
-    val onSetCheckModuleUpdate: (Boolean) -> Unit = {},
+    val onCopyContact: (String) -> Unit,
 )

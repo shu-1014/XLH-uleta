@@ -267,7 +267,8 @@ pub fn root_shell() -> Result<()> {
     let args = exec_args.unwrap_or_else(|| {
         matches
             .opt_str("c")
-            .map_or_else(Vec::new, |cmd| vec!["-c".to_string(), cmd])
+            .map(|cmd| vec!["-c".to_string(), cmd])
+            .unwrap_or_default()
     });
 
     let mut free_idx = 0;

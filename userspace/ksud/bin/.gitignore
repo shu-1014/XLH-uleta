@@ -1,8 +1,2 @@
 **/*.ko
 **/ksuinit
-**/zygisk-module.prop
-**/zygiskd
-**/libzygisk32.so
-**/libzygisk.so
-**/zygisk-sepolicy.rule
-**/zygisk-ptrace

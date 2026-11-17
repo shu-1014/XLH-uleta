@@ -16,7 +16,7 @@ add_library(kernelsu
         ksu.cc
         )
 
-target_include_directories(kernelsu PRIVATE . ${CMAKE_CURRENT_SOURCE_DIR}/../../../../..)
+target_include_directories(kernelsu PRIVATE .)
 
 find_library(log-lib log)
 

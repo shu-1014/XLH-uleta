@@ -1,15 +1,11 @@
 package com.iki.xlh.ui.component.markdown
 
 import android.annotation.SuppressLint
-import android.content.ActivityNotFoundException
-import android.content.Intent
 import android.graphics.Color
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.webkit.JavascriptInterface
-import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -58,12 +54,7 @@ private const val APP_ASSETS_ORIGIN = "https://appassets.androidplatform.net"
 private val SEMICOLON_SPLIT = ";\\s*".toRegex()
 private val EQUALS_SPLIT = "=\\s*".toRegex()
 
-@SuppressLint(
-    "JavascriptInterface",
-    "SetJavaScriptEnabled",
-    "WrongConstant",
-    "MissingOnRenderProcessGone",
-)
+@SuppressLint("JavascriptInterface", "SetJavaScriptEnabled", "WrongConstant")
 @Composable
 fun GithubMarkdown(
     modifier: Modifier = Modifier,
@@ -186,17 +177,6 @@ fun GithubMarkdown(
                             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
                             .build()
 
-                        override fun onRenderProcessGone(
-                            view: WebView,
-                            detail: RenderProcessGoneDetail,
-                        ): Boolean {
-                            // Return true so the framework does not kill the app; detach the
-                            // dead view so it is never reused after the renderer restarts.
-                            (view.parent as? ViewGroup)?.removeView(view)
-                            view.destroy()
-                            return true
-                        }
-
                         override fun onPageFinished(view: WebView, url: String) {
                             super.onPageFinished(view, url)
                             if (restricted) return
@@ -272,19 +252,9 @@ fun GithubMarkdown(
                                 // `#anchor` of this document: the view is as tall as its content,
                                 // so there is nothing to scroll to; never leave the app for it.
                                 if (RegistryUrls.isInPageAnchor(request.url.toString(), restrictedBaseUrl)) return true
-                                // Never navigate inside the view; only web links the user tapped
-                                // leave the app (no automatic redirects such as <meta refresh>).
-                                if (!request.hasGesture()) return true
-                                val scheme = request.url.scheme?.lowercase()
-                                if (scheme != "https" && scheme != "http") return true
                             }
-                            try {
-                                val intent = Intent(Intent.ACTION_VIEW, request.url)
-                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                context.startActivity(intent)
-                            } catch (_: ActivityNotFoundException) {
-                                Log.w("GithubMarkdown", "No activity to handle: ${request.url}")
-                            }
+                            // External navigation is disabled in this build: a tap on a
+                            // link inside a module description stays inside the app.
                             return true
                         }
 

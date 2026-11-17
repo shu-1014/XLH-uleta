@@ -12,7 +12,6 @@
 #include <linux/version.h>
 
 #include "uapi/supercall.h"
-#include "extension/extension.h"
 #include "supercall/internal.h"
 #include "arch.h"
 #include "util.h"

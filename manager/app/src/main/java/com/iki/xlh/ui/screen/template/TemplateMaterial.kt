@@ -1,8 +1,8 @@
 package com.iki.xlh.ui.screen.template
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuGroup
+import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.DropdownMenuPopup
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,7 +34,6 @@ import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
-import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.SmallExtendedFloatingActionButton
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -56,8 +56,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.iki.xlh.R
 import com.iki.xlh.data.model.TemplateInfo
@@ -68,8 +66,6 @@ import com.iki.xlh.ui.component.material.SnackBarHost
 import com.iki.xlh.ui.component.material.TopBarBackButton
 import com.iki.xlh.ui.component.material.expressiveTopAppBarColors
 import com.iki.xlh.ui.component.statustag.StatusTag
-import com.iki.xlh.ui.util.CustomTextKey
-import com.iki.xlh.ui.util.customText
 
 /**
  * @author weishu
@@ -191,7 +187,7 @@ fun AppProfileTemplateScreenMaterial(
                         .fillMaxSize()
                         .nestedScroll(scrollBehavior.nestedScrollConnection),
                     state = listState,
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp),
                     contentPadding = PaddingValues(
                         start = 16.dp,
                         end = 16.dp,
@@ -212,6 +208,7 @@ fun AppProfileTemplateScreenMaterial(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TemplateItem(
     template: TemplateInfo,
@@ -219,36 +216,44 @@ private fun TemplateItem(
 ) {
     SegmentedListItem(
         onClick = onClick,
-        headlineContent = { Text(template.name, fontWeight = FontWeight.Bold) },
+        headlineContent = { Text(template.name) },
         supportingContent = {
-            Column(
-                modifier = Modifier.padding(top = 2.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
+            Column {
                 Text(
-                    text = "${template.id}${if (template.author.isEmpty()) "" else ", ${template.author}"}",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontFamily = FontFamily.Monospace,
+                    text = "${template.id}${if (template.author.isEmpty()) "" else "@${template.author}"}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 )
-                if (template.description.isNotBlank()) {
-                    Text(template.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    listOf("UID ${template.uid}", "GID ${template.gid}", template.context).forEach {
+                Text(template.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FlowRow(modifier = Modifier.padding(top = 4.dp)) {
+                    StatusTag(
+                        label = "UID: ${template.uid}",
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        backgroundColor = MaterialTheme.colorScheme.primary
+                    )
+                    StatusTag(
+                        label = "GID: ${template.gid}",
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        backgroundColor = MaterialTheme.colorScheme.primary
+                    )
+                    StatusTag(
+                        label = template.context,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        backgroundColor = MaterialTheme.colorScheme.primary
+                    )
+                    if (template.local) {
                         StatusTag(
-                            label = it,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                            backgroundColor = MaterialTheme.colorScheme.secondaryContainer
+                            label = "local",
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                            backgroundColor = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        StatusTag(
+                            label = "remote",
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                            backgroundColor = MaterialTheme.colorScheme.primary
                         )
                     }
-                    StatusTag(
-                        label = if (template.local) "local" else "remote",
-                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                        backgroundColor = MaterialTheme.colorScheme.tertiaryContainer
-                    )
                 }
             }
         },
@@ -265,7 +270,7 @@ private fun TopBar(
     val haptic = LocalHapticFeedback.current
     LargeFlexibleTopAppBar(
         title = {
-            Text(customText(CustomTextKey.PAGE_TEMPLATE))
+            Text(stringResource(R.string.settings_profile_template))
         },
         navigationIcon = {
             TopBarBackButton(onClick = onBack)

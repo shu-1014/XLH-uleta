@@ -33,6 +33,7 @@ import com.iki.xlh.ui.component.material.SegmentedTextField
 import com.iki.xlh.ui.component.profile.dialogs.MultiSelectDialog
 import com.iki.xlh.ui.component.profile.dialogs.SingleSelectDialog
 import com.iki.xlh.ui.util.isSepolicyValid
+
 @Composable
 fun RootProfileConfigMaterial(
     modifier: Modifier = Modifier,
