@@ -156,7 +156,7 @@ android {
             providers.exec { commandLine("git", "rev-parse", "HEAD") }.standardOutput.asText.get().trim()
         }.getOrNull()?.takeIf { it.isNotBlank() } ?: "xlh-local-build"
         buildConfigField("String", "MANAGER_COMMIT", "\"$commit\"")
-        resValue("string", "app_name", managerName)
+        // app_name 写在 res/values/strings.xml（UTF-8），不用 resValue，避免 emoji 编码丢失
 
         externalNativeBuild {
             cmake {
