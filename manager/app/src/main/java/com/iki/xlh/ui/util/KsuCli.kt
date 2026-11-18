@@ -433,10 +433,6 @@ fun installBoot(
 
     var cmd = "boot-patch"
 
-    // 必须显式传包名：ksud 的默认值来自它自己的编译期常量，
-    // 用的若不是本 APK 编译的 ksud，默认值会和 applicationId 不一致，
-    // patch 完成后内核会认错管理器，表现为「装了管理器却显示未安装」。
-    cmd += " --package-name ${ksuApp.packageName.shellArg()}"
 
     cmd += if (bootFile == null) {
         // no boot.img, use -f to flash
@@ -581,8 +577,6 @@ fun downloadBoot(
     }
 
     var cmd = "${getKsuDaemonPath()} boot-patch -b ${bootFile.absolutePath}"
-    // 同第一条路径：包名必须和本 APK 一致，否则内核认错管理器
-    cmd += " --package-name ${ksuApp.packageName.shellArg()}"
     cmd += bootPatchFlags(allowShell, enableAdb, forceBackup, blockModules)
 
     cmd += " --spoof-release ${spoofRelease.trim().shellArg()}"
