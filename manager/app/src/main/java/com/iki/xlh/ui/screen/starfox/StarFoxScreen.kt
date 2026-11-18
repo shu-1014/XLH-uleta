@@ -22,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -47,6 +48,9 @@ import com.iki.xlh.starfox.StarFoxResult
 import com.iki.xlh.starfox.StarFoxRootStatus
 import com.iki.xlh.starfox.StarFoxState
 import com.iki.xlh.starfox.StarFoxStore
+import com.iki.xlh.server.KvServerClient
+import com.iki.xlh.server.KvServerState
+import com.iki.xlh.server.KvServerStore
 import com.iki.xlh.ui.stealth.Stealth
 import com.iki.xlh.ui.stealth.StealthController
 import com.iki.xlh.ui.navigation3.LocalNavigator
@@ -78,6 +82,10 @@ fun StarFoxScreen() {
     var kernelStealth by remember { mutableStateOf(false) }
     var recoveryCode by remember { mutableStateOf("") }
     var stealthDetail by remember { mutableStateOf<Map<String, Boolean?>>(emptyMap()) }
+    // 远程管理服务器
+    var serverState by remember { mutableStateOf(KvServerStore.load(context)) }
+    var cardInput by remember { mutableStateOf(serverState.cardKey) }
+    var serverBusy by remember { mutableStateOf(false) }
 
     fun persist(next: StarFoxState) {
         state = next
@@ -349,6 +357,112 @@ SectionCard(title = stringResource(R.string.starfox_section_disguise)) {
     )
 }
 
+
+            // 远程管理服务器：只做设备/卡密管理与公告，不下发驱动
+            SectionCard(title = stringResource(R.string.starfox_section_server)) {
+                OutlinedTextField(
+                    value = cardInput,
+                    onValueChange = { cardInput = it },
+                    label = { Text(stringResource(R.string.server_card_label)) },
+                    placeholder = { Text(stringResource(R.string.server_card_hint)) },
+                    singleLine = true,
+                    enabled = !serverBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        enabled = !serverBusy,
+                        onClick = {
+                            serverBusy = true
+                            scope.launch(Dispatchers.IO) {
+                                val mac = KvServerClient.machineId(context)
+                                val key = cardInput.ifBlank { "FREE" }
+                                val r = KvServerClient.verify(key, mac)
+                                val info = KvServerClient.parseCard(r.data)
+                                val online = runCatching {
+                                    KvServerClient.parseOnline(KvServerClient.online().data)
+                                }.getOrDefault(0)
+                                val notice = runCatching {
+                                    KvServerClient.notice(key, mac).data
+                                        ?.get("notice")?.toString()?.trim('"').orEmpty()
+                                }.getOrDefault("")
+                                withContext(Dispatchers.Main) {
+                                    serverState = if (r.ok) {
+                                        serverState.copy(
+                                            cardKey = cardInput,
+                                            verified = true,
+                                            appName = info.appName,
+                                            cardType = info.type.ifBlank { info.mode },
+                                            expireText = info.expireAt
+                                                ?: info.remainDays?.let { "$it 天" }
+                                                ?: "永久",
+                                            lastSyncAt = System.currentTimeMillis(),
+                                            lastError = "",
+                                            onlineCount = online,
+                                            notice = notice,
+                                        )
+                                    } else {
+                                        serverState.copy(
+                                            verified = false,
+                                            lastError = r.msg.ifBlank { "验证失败" },
+                                        )
+                                    }
+                                    KvServerStore.save(context, serverState)
+                                    serverBusy = false
+                                }
+                            }
+                        }
+                    ) {
+                        Text(stringResource(R.string.server_verify))
+                    }
+                    OutlinedButton(
+                        enabled = !serverBusy && serverState.verified,
+                        onClick = {
+                            serverBusy = true
+                            scope.launch(Dispatchers.IO) {
+                                val mac = KvServerClient.machineId(context)
+                                val key = serverState.cardKey.ifBlank { "FREE" }
+                                val r = KvServerClient.heartbeat(key, mac)
+                                val online = runCatching {
+                                    KvServerClient.parseOnline(KvServerClient.online().data)
+                                }.getOrDefault(0)
+                                withContext(Dispatchers.Main) {
+                                    serverState = serverState.copy(
+                                        lastSyncAt = System.currentTimeMillis(),
+                                        onlineCount = online,
+                                        lastError = if (r.ok) "" else r.msg,
+                                    )
+                                    KvServerStore.save(context, serverState)
+                                    serverBusy = false
+                                }
+                            }
+                        }
+                    ) {
+                        Text(stringResource(R.string.server_sync))
+                    }
+                }
+
+                if (serverState.verified) {
+                    StatusLine(stringResource(R.string.server_app), serverState.appName.ifBlank { "-" })
+                    StatusLine(stringResource(R.string.server_type), serverState.cardType.ifBlank { "-" })
+                    StatusLine(stringResource(R.string.server_expire), serverState.expireText.ifBlank { "-" })
+                    StatusLine(stringResource(R.string.server_online), serverState.onlineCount.toString())
+                }
+                if (serverState.lastError.isNotBlank()) {
+                    Text(
+                        text = serverState.lastError,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                if (serverState.notice.isNotBlank()) {
+                    Text(
+                        text = serverState.notice,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
 
             // 一键操作
             SectionCard(title = stringResource(R.string.starfox_section_tools)) {
