@@ -25,8 +25,26 @@ data class KvServerState(
     val lastError: String = "",
     /** 在线设备数（online 接口）。 */
     val onlineCount: Int = 0,
+    /** 累计安装次数（install / online 接口）。 */
+    val installCount: Int = 0,
+    /** 是否已上报过安装（每台设备只报一次）。 */
+    val installReported: Boolean = false,
     /** 公告正文（notice 接口），空表示没有公告。 */
     val notice: String = "",
+    /** 公告 ID，用于判断是不是同一条。 */
+    val noticeId: String = "",
+    /** 用户已关闭的公告 ID，关闭后不再弹。 */
+    val noticeDismissedId: String = "",
+    /** 云更新：服务器上的最新版本号。 */
+    val latestVersion: String = "",
+    /** 云更新：最新版本 code，用来和 BuildConfig.VERSION_CODE 比较。 */
+    val latestVersionCode: Int = 0,
+    /** 云更新：下载地址。 */
+    val latestUrl: String = "",
+    /** 云更新：更新日志。 */
+    val latestChangelog: String = "",
+    /** 云更新：是否强制更新。 */
+    val latestForce: Boolean = false,
     /** 远程开关：服务端下发，本地只读。 */
     val remoteEnabled: Boolean = true,
     /** 心跳是否开启（用户可关）。 */
@@ -51,7 +69,16 @@ object KvServerStore {
             lastSyncAt = p.getLong("last_sync", 0L),
             lastError = p.getString("last_error", "").orEmpty(),
             onlineCount = p.getInt("online", 0),
+            installCount = p.getInt("installs", 0),
+            installReported = p.getBoolean("install_reported", false),
             notice = p.getString("notice", "").orEmpty(),
+            noticeId = p.getString("notice_id", "").orEmpty(),
+            noticeDismissedId = p.getString("notice_dismissed", "").orEmpty(),
+            latestVersion = p.getString("latest_version", "").orEmpty(),
+            latestVersionCode = p.getInt("latest_code", 0),
+            latestUrl = p.getString("latest_url", "").orEmpty(),
+            latestChangelog = p.getString("latest_changelog", "").orEmpty(),
+            latestForce = p.getBoolean("latest_force", false),
             remoteEnabled = p.getBoolean("remote_enabled", true),
             heartbeatEnabled = p.getBoolean("heartbeat", true),
         )
@@ -67,7 +94,16 @@ object KvServerStore {
             .putLong("last_sync", state.lastSyncAt)
             .putString("last_error", state.lastError)
             .putInt("online", state.onlineCount)
+            .putInt("installs", state.installCount)
+            .putBoolean("install_reported", state.installReported)
             .putString("notice", state.notice)
+            .putString("notice_id", state.noticeId)
+            .putString("notice_dismissed", state.noticeDismissedId)
+            .putString("latest_version", state.latestVersion)
+            .putInt("latest_code", state.latestVersionCode)
+            .putString("latest_url", state.latestUrl)
+            .putString("latest_changelog", state.latestChangelog)
+            .putBoolean("latest_force", state.latestForce)
             .putBoolean("remote_enabled", state.remoteEnabled)
             .putBoolean("heartbeat", state.heartbeatEnabled)
             .apply()
