@@ -280,9 +280,9 @@ jobs:
         if: ${{ inputs.sign }}
         env:
           KS_B64: ${{ secrets.KEYSTORE }}
-          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD || 'starfox123' }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'starfox' }}
-          KEY_PASS: ${{ secrets.KEY_PASSWORD || 'starfox123' }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASSWORD }}
           WANT_HASH: ${{ inputs.expected_hash }}
           WANT_SIZE: ${{ inputs.expected_size }}
           # 内置固定 keystore（PKCS12, base64）：仓库没配 Secret 时用它，
@@ -337,6 +337,11 @@ jobs:
             JgjVK2pyuBACAicQ
         run: |
           set -eu
+          # Secret 未配置时用内置默认值（用 shell 默认值，避免 workflow 表达式报错）
+          KS_PASS="${KS_PASS:-starfox123}"
+          KEY_ALIAS="${KEY_ALIAS:-starfox}"
+          KEY_PASS="${KEY_PASS:-starfox123}"
+
           # 优先 Secret，其次内置固定 keystore
           if [ -n "${KS_B64:-}" ]; then
             printf '%s' "$KS_B64" | tr -d ' \t\r\n' | base64 -d > manager/xinglinghu-release.jks
