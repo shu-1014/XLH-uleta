@@ -167,6 +167,12 @@ object KvServerClient {
 
     suspend fun online() = call("online", "FREE", "")
 
+    /** 上报一次安装（首次启动调用）；服务端返回累计安装次数。 */
+    suspend fun reportInstall(mac: String) = call("install", "FREE", mac)
+
+    /** 云更新：查最新版本。 */
+    suspend fun checkVersion(mac: String) = call("version", "FREE", mac)
+
     // ---------------------------------------------------------------- data 解析
 
     /** 从 verify / query / heartbeat 的 data 里抽常用字段。 */
@@ -206,6 +212,41 @@ object KvServerClient {
     /** online 接口的在线人数。 */
     fun parseOnline(data: JsonObject?): Int =
         data?.get("online")?.jsonPrimitive?.intOrNull ?: 0
+
+    /** online / install 接口的累计安装次数。 */
+    fun parseInstalls(data: JsonObject?): Int =
+        data?.get("installs")?.jsonPrimitive?.intOrNull ?: 0
+
+    /** notice 接口的公告正文；空串表示没有公告。 */
+    fun parseNotice(data: JsonObject?): Pair<String, String> {
+        if (data == null) return "" to ""
+        val text = data["notice"]?.let { runCatching { it.jsonPrimitive.contentOrNullSafe() }.getOrNull() }.orEmpty()
+        val id = data["notice_id"]?.let { runCatching { it.jsonPrimitive.contentOrNullSafe() }.getOrNull() }.orEmpty()
+        return text.trim() to id.trim()
+    }
+
+    /** version 接口的云更新信息。 */
+    data class VersionInfo(
+        val latest: String = "",
+        val versionCode: Int = 0,
+        val url: String = "",
+        val changelog: String = "",
+        val force: Boolean = false,
+        val size: Long = 0L,
+    )
+
+    fun parseVersion(data: JsonObject?): VersionInfo {
+        if (data == null) return VersionInfo()
+        fun str(k: String) = data[k]?.let { runCatching { it.jsonPrimitive.contentOrNullSafe() }.getOrNull() }.orEmpty()
+        return VersionInfo(
+            latest = str("latest").ifBlank { str("version_name") },
+            versionCode = data["version_code"]?.jsonPrimitive?.intOrNull ?: 0,
+            url = str("url").ifBlank { str("download") },
+            changelog = str("changelog").ifBlank { str("note") },
+            force = data["force"]?.jsonPrimitive?.booleanOrNull ?: false,
+            size = data["size"]?.jsonPrimitive?.longOrNull ?: 0L,
+        )
+    }
 }
 
 /** JSON 里值为 null 时 jsonPrimitive.content 会抛异常，这里统一兜一层。 */
