@@ -22,7 +22,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -84,8 +83,6 @@ fun StarFoxScreen() {
     var stealthDetail by remember { mutableStateOf<Map<String, Boolean?>>(emptyMap()) }
     // 远程管理服务器
     var serverState by remember { mutableStateOf(KvServerStore.load(context)) }
-    var deviceId by remember { mutableStateOf("") }
-    var serverBusy by remember { mutableStateOf(false) }
 
     fun persist(next: StarFoxState) {
         state = next
@@ -183,7 +180,6 @@ fun StarFoxScreen() {
         kernelStealth = runCatching { Stealth.isEnabled() }.getOrDefault(false)
         stealthDetail = runCatching { Stealth.detail() }.getOrDefault(emptyMap())
         recoveryCode = runCatching { StealthController.dialCode(context) }.getOrDefault("")
-        deviceId = runCatching { KvServerClient.machineId(context) }.getOrDefault("").take(12)
         busy = false
         // 服务器同步放到最后，失败不影响上面的本地状态
         runCatching { syncServer(reportInstallOnce = true) }
@@ -432,68 +428,6 @@ SectionCard(title = stringResource(R.string.starfox_section_disguise)) {
     )
 }
 
-
-            // 云端服务：在线 / 装机统计、公告、云更新（服务端 cloud.php）
-            SectionCard(title = stringResource(R.string.starfox_section_server)) {
-                StatusLine(stringResource(R.string.server_host), KvServerClient.BASE_URL.removePrefix("https://"))
-                StatusLine(stringResource(R.string.server_device), deviceId.ifBlank { "-" })
-                StatusLine(
-                    stringResource(R.string.server_last_sync),
-                    if (serverState.lastSyncAt > 0) {
-                        java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault())
-                            .format(java.util.Date(serverState.lastSyncAt))
-                    } else {
-                        stringResource(R.string.server_never)
-                    },
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        enabled = !serverBusy,
-                        onClick = {
-                            serverBusy = true
-                            scope.launch(Dispatchers.IO) {
-                                runCatching { syncServer(reportInstallOnce = true) }
-                                withContext(Dispatchers.Main) { serverBusy = false }
-                            }
-                        }
-                    ) {
-                        Text(stringResource(R.string.server_sync))
-                    }
-                    OutlinedButton(
-                        enabled = !serverBusy,
-                        onClick = {
-                            serverBusy = true
-                            scope.launch(Dispatchers.IO) {
-                                val r = runCatching { KvServerClient.install(context) }.getOrNull()
-                                val st = KvServerClient.parseStats(r?.data)
-                                withContext(Dispatchers.Main) {
-                                    if (r != null) {
-                                        serverState = serverState.copy(
-                                            installReported = r.ok,
-                                            installCount = if (st.installTotal > 0) st.installTotal else serverState.installCount,
-                                            onlineCount = if (st.online > 0) st.online else serverState.onlineCount,
-                                            lastError = if (r.ok) "" else r.msg,
-                                        )
-                                        KvServerStore.save(context, serverState)
-                                    }
-                                    serverBusy = false
-                                }
-                            }
-                        }
-                    ) {
-                        Text(stringResource(R.string.server_report))
-                    }
-                }
-                // 在线人数 / 累计安装次数（服务端统计）
-                ServerStatsRow(state = serverState)
-                if (serverState.lastError.isNotBlank()) {
-                    Text(
-                        text = serverState.lastError,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
 
             // 一键操作
             SectionCard(title = stringResource(R.string.starfox_section_tools)) {
