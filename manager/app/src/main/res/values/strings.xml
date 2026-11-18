@@ -1816,19 +1816,4 @@
     <string name="stealth_recovery_reset">恢复默认密令</string>
     <string name="ikun_icon_restored">已恢复桌面图标并关闭隐身</string>
     <string name="ikun_recovery_unavailable">图标已恢复，但内核隐身关闭失败</string>
-    <!-- ===== 远程管理服务器 ===== -->
-    <string name="starfox_section_server">远程管理服务器</string>
-    <string name="server_card_label">卡密</string>
-    <string name="server_card_hint">留空 = 免费模式</string>
-    <string name="server_verify">验证</string>
-    <string name="server_sync">心跳同步</string>
-    <string name="server_app">应用</string>
-    <string name="server_type">类型</string>
-    <string name="server_expire">有效期</string>
-    <string name="server_online">全服在线</string>
-    <string name="server_host">服务地址</string>
-    <string name="server_device">设备号</string>
-    <string name="server_last_sync">上次同步</string>
-    <string name="server_never">从未</string>
-    <string name="server_report">上报安装</string>
 </resources>
