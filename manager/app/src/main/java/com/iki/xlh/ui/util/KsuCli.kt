@@ -433,6 +433,11 @@ fun installBoot(
 
     var cmd = "boot-patch"
 
+    // 必须显式传包名：ksud 的默认值来自它自己的编译期常量，
+    // 用的若不是本 APK 编译的 ksud，默认值会和 applicationId 不一致，
+    // patch 完成后内核会认错管理器，表现为「装了管理器却显示未安装」。
+    cmd += " --package-name ${ksuApp.packageName.shellArg()}"
+
     cmd += if (bootFile == null) {
         // no boot.img, use -f to flash
         " -f"
@@ -576,6 +581,8 @@ fun downloadBoot(
     }
 
     var cmd = "${getKsuDaemonPath()} boot-patch -b ${bootFile.absolutePath}"
+    // 同第一条路径：包名必须和本 APK 一致，否则内核认错管理器
+    cmd += " --package-name ${ksuApp.packageName.shellArg()}"
     cmd += bootPatchFlags(allowShell, enableAdb, forceBackup, blockModules)
 
     cmd += " --spoof-release ${spoofRelease.trim().shellArg()}"
@@ -664,17 +671,78 @@ fun rootAvailable(): Boolean {
     return shell.isRoot
 }
 
+/**
+ * 从内核版本串里解析 KMI，例如
+ * `5.10.209-android12-9-g1234abcd` → `android12-5.10`。
+ *
+ * 与 ksud 的 `boot_patch::parse_kmi` 正则保持一致：
+ * `(.* )?(\d+\.\d+)(\S+)?(android\d+)(.*)`，取第 2 组（内核版本）和第 4 组（androidN）。
+ */
+private val KMI_REGEX = Regex("""(.* )?(\d+\.\d+)(\S+)?(android\d+)(.*)""")
+
+internal fun parseKmiFromVersion(version: String): String? {
+    val m = KMI_REGEX.find(version) ?: return null
+    val kernel = m.groupValues[2].trim()
+    val android = m.groupValues[4].trim()
+    if (kernel.isEmpty() || android.isEmpty()) return null
+    return "$android-$kernel"
+}
+
+/**
+ * 直接跑 ksud 拿一行输出，**不需要 root**。
+ *
+ * `boot-info` 子命令只是读 ksud 内嵌的资产名单和 uname，从来不需要提权；
+ * 之前强行走 root shell 会让未 root 设备（正是要装 root 的时候）拿不到任何结果，
+ * 表现就是「KMI 列表为空、选不了」。
+ */
+private fun runKsudDirect(vararg args: String): String? = runCatching {
+    val daemon = getKsuDaemonPath()
+    if (!java.io.File(daemon).canExecute()) return@runCatching null
+    val process = ProcessBuilder(listOf(daemon) + args.toList())
+        .redirectErrorStream(true)
+        .start()
+    val output = process.inputStream.bufferedReader().use { it.readText() }
+    process.waitFor()
+    output.trim().ifEmpty { null }
+}.getOrNull()
+
 suspend fun getCurrentKmi(): String = withContext(Dispatchers.IO) {
-    val shell = getRootShell()
-    val cmd = "boot-info current-kmi"
-    ShellUtils.fastCmd(shell, "${getKsuDaemonPath()} $cmd")
+    // ① 不需要 root：直接读内核版本串自己解析
+    parseKmiFromVersion(System.getProperty("os.version").orEmpty())?.let { return@withContext it }
+
+    // ② 兜底：问 ksud（同样不需要 root）
+    runKsudDirect("boot-info", "current-kmi")?.let { line ->
+        parseKmiFromVersion(line)?.let { return@withContext it }
+        if (line.isNotBlank()) return@withContext line.lines().first().trim()
+    }
+
+    // ③ 最后才试 root shell，兼容老行为
+    runCatching {
+        val shell = getRootShell()
+        ShellUtils.fastCmd(shell, "${getKsuDaemonPath()} boot-info current-kmi").trim()
+    }.getOrDefault("")
 }
 
 suspend fun getSupportedKmis(): List<String> = withContext(Dispatchers.IO) {
-    val shell = getRootShell()
-    val cmd = "boot-info supported-kmis"
-    val out = shell.newJob().add("${getKsuDaemonPath()} $cmd").to(ArrayList(), null).exec().out
-    out.filter { it.isNotBlank() }.map { it.trim() }
+    // ① 不需要 root：ksud 的内嵌 .ko 名单直接读
+    runKsudDirect("boot-info", "supported-kmis")
+        ?.lines()
+        ?.map { it.trim() }
+        ?.filter { it.isNotBlank() && it.startsWith("android") }
+        ?.distinct()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let { return@withContext it }
+
+    // ② 兜底：走 root shell（已 root 设备上可用）
+    runCatching {
+        val shell = getRootShell()
+        shell.newJob()
+            .add("${getKsuDaemonPath()} boot-info supported-kmis")
+            .to(ArrayList(), null)
+            .exec().out
+            .filter { it.isNotBlank() }
+            .map { it.trim() }
+    }.getOrDefault(emptyList())
 }
 
 suspend fun isAbDevice(): Boolean = withContext(Dispatchers.IO) {
