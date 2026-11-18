@@ -44,8 +44,13 @@ import javax.net.ssl.X509TrustManager
  */
 object KvServerClient {
 
-    /** 业务站点根；cloud.php 在根目录。 */
-    const val BASE_URL = "https://kv.wxlh.asia"
+    /**
+     * 业务站点根；cloud.php 在根目录。
+     *
+     * 注意是 `www.wxlh.asia` —— `kv.wxlh.asia` 这个 vhost 在当前服务器上
+     * 握手不成功（同 IP 的 www 正常），别改回去。
+     */
+    const val BASE_URL = "https://www.wxlh.asia"
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -218,15 +223,36 @@ object KvServerClient {
     fun parseNeed(data: JsonObject?): Boolean =
         (data?.get("need")?.jsonPrimitive?.intOrNull ?: 0) == 1
 
-    /** 公告：正文 + 版本号（版本变了就算新公告）。 */
+    /**
+     * 公告：正文 + 版本号（版本变了就算新公告）。
+     *
+     * 服务端 content 里可能带少量 HTML（`<b>`、`<br>`），
+     * 这里统一清成纯文本——管理器用 Text 渲染，不跑 WebView。
+     */
     fun parseNotice(data: JsonObject?): Triple<Boolean, String, String> {
         if (data == null) return Triple(false, "", "")
         val enabled = (data["enabled"]?.jsonPrimitive?.intOrNull ?: 0) != 0
-        val title = data["title"]?.contentSafe().orEmpty()
-        val content = data["content"]?.contentSafe().orEmpty()
+        val title = stripHtml(data["title"]?.contentSafe().orEmpty())
+        val content = stripHtml(data["content"]?.contentSafe().orEmpty())
         val ver = data["ver"]?.jsonPrimitive?.intOrNull?.toString().orEmpty()
         val text = if (title.isNotBlank() && content.isNotBlank()) "$title\n$content" else content
-        return Triple(enabled && text.isNotBlank(), text, ver)
+        return Triple(enabled && text.isNotBlank(), text.trim(), ver)
+    }
+
+    /** 把 <br> / </p> 换成换行，其余标签去掉，实体基本解码。 */
+    private fun stripHtml(raw: String): String {
+        if (raw.isBlank()) return ""
+        var s = raw
+            .replace(Regex("(?i)<br\\s*/?>"), "\n")
+            .replace(Regex("(?i)</p\\s*>"), "\n")
+            .replace(Regex("(?i)</div\\s*>"), "\n")
+            .replace(Regex("<[^>]+>"), "")
+        s = s.replace("&nbsp;", " ")
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+        return s.lines().joinToString("\n") { it.trimEnd() }.trim()
     }
 
     /** 服务端 API 版本，用于排查「服务端没更新」。 */
