@@ -22,22 +22,22 @@ on:
       expected_hash:
         description: '管理器签名证书 SHA-256'
         required: true
-        default: 'ff7d77b3f5ee160dfcac5ff8a42d7a31eb825b2d88f83017b8323dd51c6c3b8d'
+        default: '4d9536cc94dd4c9c5a83e142c842c056c921fd8d501290bb5b93ba213ac08c5e'
         type: string
       expected_size:
         description: '管理器签名证书 DER 长度'
         required: true
-        default: '0x033b'
+        default: '0x030c'
         type: string
       version_code:
         description: 'versionCode（同时作为内核上报的 KSU_VERSION）'
         required: true
-        default: '30015'
+        default: '26045'
         type: string
       version_name:
         description: 'versionName'
         required: true
-        default: 'v3.5.5-xinglinghu'
+        default: 'v3.6.0-xlh'
         type: string
       sign:
         description: '是否签名（需要先在仓库配好 KEYSTORE 等 Secrets）'
@@ -280,22 +280,74 @@ jobs:
         if: ${{ inputs.sign }}
         env:
           KS_B64: ${{ secrets.KEYSTORE }}
-          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASS: ${{ secrets.KEY_PASSWORD }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD || 'starfox123' }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'starfox' }}
+          KEY_PASS: ${{ secrets.KEY_PASSWORD || 'starfox123' }}
           WANT_HASH: ${{ inputs.expected_hash }}
           WANT_SIZE: ${{ inputs.expected_size }}
+          # 内置固定 keystore（PKCS12, base64）：仓库没配 Secret 时用它，
+          # 保证每次构建签名一致，内核才能稳定认出管理器。
+          KS_BUILTIN: |
+            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
+            JgjVK2pyuBACAicQ
         run: |
           set -eu
-          if [ -z "${KS_B64:-}" ]; then
-            echo "::error::你勾选了签名，但仓库里没有 KEYSTORE Secret。"
-            echo "::error::请到 Settings → Secrets and variables → Actions 配置："
-            echo "::error::KEYSTORE（.jks 的 base64）、KEYSTORE_PASSWORD、KEY_ALIAS、KEY_PASSWORD"
+          # 优先 Secret，其次内置固定 keystore
+          if [ -n "${KS_B64:-}" ]; then
+            printf '%s' "$KS_B64" | tr -d ' \t\r\n' | base64 -d > manager/xinglinghu-release.jks
+            echo "密钥库来源：Secret"
+          elif [ -n "${KS_BUILTIN:-}" ]; then
+            printf '%s' "$KS_BUILTIN" | tr -d ' \t\r\n' | base64 -d > manager/xinglinghu-release.jks
+            echo "密钥库来源：内置固定签名"
+          else
+            echo "::error::没有可用的密钥库"
             exit 1
           fi
-
-          # 别信 Secret 粘贴时的换行/空格，先清干净再解码。
-          printf '%s' "$KS_B64" | tr -d ' \t\r\n' | base64 -d > manager/xinglinghu-release.jks
           [ -s manager/xinglinghu-release.jks ] \
             || { echo "::error::KEYSTORE 解码后是空的，检查 base64 是否完整"; exit 1; }
           echo "密钥库已写入：$(stat -c%s manager/xinglinghu-release.jks) 字节"
