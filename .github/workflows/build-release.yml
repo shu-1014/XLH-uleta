@@ -148,8 +148,7 @@ jobs:
               -dname "CN=StarFox,O=StarFox,C=CN" -noprompt
             echo "::warning::no fixed keystore, signature changes every build"
             echo "=====KEYSTORE_B64_START====="
-            base64 -w0 "$KEYSTORE"
-            echo ""
+            base64 "$KEYSTORE" | sed 's/^/KB64:/'
             echo "=====KEYSTORE_B64_END====="
           fi
 
