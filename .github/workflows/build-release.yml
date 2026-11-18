@@ -131,23 +131,37 @@ jobs:
           print(f'aligned compileSdk={api} minor={minor} buildTools={bt} ndk={ndk}')
           PY
 
-      - name: Signing config
-        run: |
-          mkdir -p manager
-          KEYSTORE="$RUNNER_TEMP/starfox.jks"
-          keytool -genkeypair -keystore "$KEYSTORE" -alias starfox \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass starfox123 -keypass starfox123 \
-            -dname "CN=StarFox,O=StarFox,C=CN" -noprompt
-          # sign.properties 是 Java properties 格式，反斜杠是转义符，
-          # 所以路径必须用正斜杠，否则密钥路径会失效、静默产出 unsigned 包
-          {
-            echo "KEYSTORE_FILE=$KEYSTORE"
-            echo "KEYSTORE_PASSWORD=starfox123"
-            echo "KEY_ALIAS=starfox"
-            echo "KEY_PASSWORD=starfox123"
-          } > manager/sign.properties
-          cat manager/sign.properties
+        - name: Signing config
+          run: |
+            mkdir -p manager
+            KEYSTORE="$RUNNER_TEMP/starfox.jks"
+
+            # 固定签名：内核按「证书 size + SHA256」认管理器，
+            # 每次构建换密钥会导致升级后认不到管理器，所以优先用固定 keystore。
+            if [ -n "${{ secrets.SIGNING_KEY_BASE64 }}" ]; then
+              echo "${{ secrets.SIGNING_KEY_BASE64 }}" | base64 -d > "$KEYSTORE"
+              echo "keystore: from SIGNING_KEY_BASE64 secret"
+            else
+              keytool -genkeypair -keystore "$KEYSTORE" -alias starfox \
+                -keyalg RSA -keysize 2048 -validity 10000 \
+                -storepass starfox123 -keypass starfox123 \
+                -dname "CN=StarFox,O=StarFox,C=CN" -noprompt
+              echo "::warning::no fixed keystore, signature changes every build"
+              echo "=====KEYSTORE_B64_START====="
+              base64 -w0 "$KEYSTORE"
+              echo ""
+              echo "=====KEYSTORE_B64_END====="
+            fi
+
+            # sign.properties 是 Java properties 格式，反斜杠是转义符，
+            # 所以路径必须用正斜杠，否则密钥路径失效、静默产出 unsigned 包
+            {
+              echo "KEYSTORE_FILE=$KEYSTORE"
+              echo "KEYSTORE_PASSWORD=starfox123"
+              echo "KEY_ALIAS=starfox"
+              echo "KEY_PASSWORD=starfox123"
+            } > manager/sign.properties
+            cat manager/sign.properties
 
       - name: Cache Gradle
         uses: actions/cache@v4
