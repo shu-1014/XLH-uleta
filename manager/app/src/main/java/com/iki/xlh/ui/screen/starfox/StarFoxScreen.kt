@@ -84,7 +84,7 @@ fun StarFoxScreen() {
     var stealthDetail by remember { mutableStateOf<Map<String, Boolean?>>(emptyMap()) }
     // 远程管理服务器
     var serverState by remember { mutableStateOf(KvServerStore.load(context)) }
-    var cardInput by remember { mutableStateOf(serverState.cardKey) }
+    var deviceId by remember { mutableStateOf("") }
     var serverBusy by remember { mutableStateOf(false) }
 
     fun persist(next: StarFoxState) {
@@ -113,52 +113,62 @@ fun StarFoxScreen() {
     }
 
     /**
-     * 服务器同步：安装上报 / 在线与安装统计 / 公告 / 云更新。
+     * 与云端服务（服务器上的 cloud.php）同步：
+     * 安装上报 / 在线与装机统计 / 公告 / 云更新。
      *
-     * 全部包在 runCatching 里——服务器连不上时界面照常可用，
-     * 只是这几块显示上次缓存的值。
+     * 整个流程包在 runCatching 里——服务器连不上时界面照常用，
+     * 这几块显示上一次成功的缓存值。
      */
     suspend fun syncServer(reportInstallOnce: Boolean = false) {
-        val mac = runCatching { KvServerClient.machineId(context) }.getOrDefault("")
         val snapshot = serverState
 
+        // ① 首次启动上报安装（服务端按 mac 去重，只有首装算新增）
         if (reportInstallOnce && !snapshot.installReported) {
-            val r = runCatching { KvServerClient.reportInstall(mac) }.getOrNull()
+            val r = runCatching { KvServerClient.install(context) }.getOrNull()
             if (r != null) {
-                val n = KvServerClient.parseInstalls(r.data)
+                val st = KvServerClient.parseStats(r.data)
                 withContext(Dispatchers.Main) {
                     serverState = serverState.copy(
                         installReported = r.ok,
-                        installCount = if (n > 0) n else serverState.installCount,
+                        installCount = if (st.installTotal > 0) st.installTotal else serverState.installCount,
+                        onlineCount = if (st.online > 0) st.online else serverState.onlineCount,
+                        lastError = if (r.ok) "" else r.msg,
                     )
                     KvServerStore.save(context, serverState)
                 }
             }
         }
 
-        val onlineRes = runCatching { KvServerClient.online() }.getOrNull()
-        val online = KvServerClient.parseOnline(onlineRes?.data)
-        val installs = KvServerClient.parseInstalls(onlineRes?.data)
+        // ② 心跳 + 拉统计
+        val onlineRes = runCatching { KvServerClient.online(context) }.getOrNull()
+        val stats = KvServerClient.parseStats(onlineRes?.data)
 
-        val key = snapshot.cardKey.ifBlank { "FREE" }
-        val noticeRes = runCatching { KvServerClient.notice(key, mac) }.getOrNull()
-        val (noticeText, noticeId) = KvServerClient.parseNotice(noticeRes?.data)
+        // ③ 公告
+        val noticeRes = runCatching { KvServerClient.notice() }.getOrNull()
+        val (noticeOn, noticeText, noticeVer) = KvServerClient.parseNotice(noticeRes?.data)
 
-        val verRes = runCatching { KvServerClient.checkVersion(mac) }.getOrNull()
-        val ver = KvServerClient.parseVersion(verRes?.data)
+        // ④ 云更新
+        val verRes = runCatching { KvServerClient.update() }.getOrNull()
+        val release = KvServerClient.parseRelease(verRes?.data)
+        val serverNeed = KvServerClient.parseNeed(verRes?.data)
 
         withContext(Dispatchers.Main) {
             serverState = serverState.copy(
-                onlineCount = online,
-                installCount = if (installs > 0) installs else serverState.installCount,
-                notice = noticeText,
-                noticeId = noticeId,
-                latestVersion = ver.latest,
-                latestVersionCode = ver.versionCode,
-                latestUrl = ver.url,
-                latestChangelog = ver.changelog,
-                latestForce = ver.force,
+                onlineCount = stats.online,
+                installCount = if (stats.installTotal > 0) stats.installTotal else serverState.installCount,
+                notice = if (noticeOn) noticeText else "",
+                noticeId = noticeVer,
+                latestVersion = release.verName,
+                latestVersionCode = if (serverNeed) release.verCode else release.verCode,
+                latestUrl = release.url,
+                latestChangelog = release.changelog,
+                latestForce = release.force,
                 lastSyncAt = System.currentTimeMillis(),
+                lastError = when {
+                    onlineRes == null -> "连不上服务器"
+                    !onlineRes.ok -> onlineRes.msg.ifBlank { "同步失败" }
+                    else -> ""
+                },
             )
             KvServerStore.save(context, serverState)
         }
@@ -173,6 +183,7 @@ fun StarFoxScreen() {
         kernelStealth = runCatching { Stealth.isEnabled() }.getOrDefault(false)
         stealthDetail = runCatching { Stealth.detail() }.getOrDefault(emptyMap())
         recoveryCode = runCatching { StealthController.dialCode(context) }.getOrDefault("")
+        deviceId = runCatching { KvServerClient.machineId(context) }.getOrDefault("").take(12)
         busy = false
         // 服务器同步放到最后，失败不影响上面的本地状态
         runCatching { syncServer(reportInstallOnce = true) }
@@ -422,16 +433,18 @@ SectionCard(title = stringResource(R.string.starfox_section_disguise)) {
 }
 
 
-            // 远程管理服务器：只做设备/卡密管理与公告，不下发驱动
+            // 云端服务：在线 / 装机统计、公告、云更新（服务端 cloud.php）
             SectionCard(title = stringResource(R.string.starfox_section_server)) {
-                OutlinedTextField(
-                    value = cardInput,
-                    onValueChange = { cardInput = it },
-                    label = { Text(stringResource(R.string.server_card_label)) },
-                    placeholder = { Text(stringResource(R.string.server_card_hint)) },
-                    singleLine = true,
-                    enabled = !serverBusy,
-                    modifier = Modifier.fillMaxWidth(),
+                StatusLine(stringResource(R.string.server_host), KvServerClient.BASE_URL.removePrefix("https://"))
+                StatusLine(stringResource(R.string.server_device), deviceId.ifBlank { "-" })
+                StatusLine(
+                    stringResource(R.string.server_last_sync),
+                    if (serverState.lastSyncAt > 0) {
+                        java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault())
+                            .format(java.util.Date(serverState.lastSyncAt))
+                    } else {
+                        stringResource(R.string.server_never)
+                    },
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
@@ -439,77 +452,37 @@ SectionCard(title = stringResource(R.string.starfox_section_disguise)) {
                         onClick = {
                             serverBusy = true
                             scope.launch(Dispatchers.IO) {
-                                val mac = KvServerClient.machineId(context)
-                                val key = cardInput.ifBlank { "FREE" }
-                                val r = KvServerClient.verify(key, mac)
-                                val info = KvServerClient.parseCard(r.data)
-                                val online = runCatching {
-                                    KvServerClient.parseOnline(KvServerClient.online().data)
-                                }.getOrDefault(0)
-                                val notice = runCatching {
-                                    KvServerClient.notice(key, mac).data
-                                        ?.get("notice")?.toString()?.trim('"').orEmpty()
-                                }.getOrDefault("")
-                                withContext(Dispatchers.Main) {
-                                    serverState = if (r.ok) {
-                                        serverState.copy(
-                                            cardKey = cardInput,
-                                            verified = true,
-                                            appName = info.appName,
-                                            cardType = info.type.ifBlank { info.mode },
-                                            expireText = info.expireAt
-                                                ?: info.remainDays?.let { "$it 天" }
-                                                ?: "永久",
-                                            lastSyncAt = System.currentTimeMillis(),
-                                            lastError = "",
-                                            onlineCount = online,
-                                            notice = notice,
-                                        )
-                                    } else {
-                                        serverState.copy(
-                                            verified = false,
-                                            lastError = r.msg.ifBlank { "验证失败" },
-                                        )
-                                    }
-                                    KvServerStore.save(context, serverState)
-                                    serverBusy = false
-                                }
-                            }
-                        }
-                    ) {
-                        Text(stringResource(R.string.server_verify))
-                    }
-                    OutlinedButton(
-                        enabled = !serverBusy && serverState.verified,
-                        onClick = {
-                            serverBusy = true
-                            scope.launch(Dispatchers.IO) {
-                                val mac = KvServerClient.machineId(context)
-                                val key = serverState.cardKey.ifBlank { "FREE" }
-                                val r = KvServerClient.heartbeat(key, mac)
-                                val online = runCatching {
-                                    KvServerClient.parseOnline(KvServerClient.online().data)
-                                }.getOrDefault(0)
-                                withContext(Dispatchers.Main) {
-                                    serverState = serverState.copy(
-                                        lastSyncAt = System.currentTimeMillis(),
-                                        onlineCount = online,
-                                        lastError = if (r.ok) "" else r.msg,
-                                    )
-                                    KvServerStore.save(context, serverState)
-                                    serverBusy = false
-                                }
+                                runCatching { syncServer(reportInstallOnce = true) }
+                                withContext(Dispatchers.Main) { serverBusy = false }
                             }
                         }
                     ) {
                         Text(stringResource(R.string.server_sync))
                     }
-                }
-
-                if (serverState.verified) {
-                    StatusLine(stringResource(R.string.server_app), serverState.appName.ifBlank { "-" })
-                    StatusLine(stringResource(R.string.server_type), serverState.cardType.ifBlank { "-" })
-                    StatusLine(stringResource(R.string.server_expire), serverState.expireText.ifBlank { "-" })
+                    OutlinedButton(
+                        enabled = !serverBusy,
+                        onClick = {
+                            serverBusy = true
+                            scope.launch(Dispatchers.IO) {
+                                val r = runCatching { KvServerClient.install(context) }.getOrNull()
+                                val st = KvServerClient.parseStats(r?.data)
+                                withContext(Dispatchers.Main) {
+                                    if (r != null) {
+                                        serverState = serverState.copy(
+                                            installReported = r.ok,
+                                            installCount = if (st.installTotal > 0) st.installTotal else serverState.installCount,
+                                            onlineCount = if (st.online > 0) st.online else serverState.onlineCount,
+                                            lastError = if (r.ok) "" else r.msg,
+                                        )
+                                        KvServerStore.save(context, serverState)
+                                    }
+                                    serverBusy = false
+                                }
+                            }
+                        }
+                    ) {
+                        Text(stringResource(R.string.server_report))
+                    }
                 }
                 // 在线人数 / 累计安装次数（服务端统计）
                 ServerStatsRow(state = serverState)
@@ -518,13 +491,6 @@ SectionCard(title = stringResource(R.string.starfox_section_disguise)) {
                         text = serverState.lastError,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
-                    )
-                }
-                if (serverState.notice.isNotBlank()) {
-                    Text(
-                        text = serverState.notice,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
