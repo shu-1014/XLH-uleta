@@ -1826,4 +1826,9 @@
     <string name="server_type">类型</string>
     <string name="server_expire">有效期</string>
     <string name="server_online">全服在线</string>
+    <string name="server_host">服务地址</string>
+    <string name="server_device">设备号</string>
+    <string name="server_last_sync">上次同步</string>
+    <string name="server_never">从未</string>
+    <string name="server_report">上报安装</string>
 </resources>
