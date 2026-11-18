@@ -47,9 +47,6 @@ import com.iki.xlh.starfox.StarFoxResult
 import com.iki.xlh.starfox.StarFoxRootStatus
 import com.iki.xlh.starfox.StarFoxState
 import com.iki.xlh.starfox.StarFoxStore
-import com.iki.xlh.server.KvServerClient
-import com.iki.xlh.server.KvServerState
-import com.iki.xlh.server.KvServerStore
 import com.iki.xlh.ui.stealth.Stealth
 import com.iki.xlh.ui.stealth.StealthController
 import com.iki.xlh.ui.navigation3.LocalNavigator
@@ -82,8 +79,6 @@ fun StarFoxScreen() {
     var recoveryCode by remember { mutableStateOf("") }
     var stealthDetail by remember { mutableStateOf<Map<String, Boolean?>>(emptyMap()) }
     // 远程管理服务器
-    var serverState by remember { mutableStateOf(KvServerStore.load(context)) }
-
     fun persist(next: StarFoxState) {
         state = next
         StarFoxStore.save(context, next)
@@ -109,68 +104,6 @@ fun StarFoxScreen() {
         }
     }
 
-    /**
-     * 与云端服务（服务器上的 cloud.php）同步：
-     * 安装上报 / 在线与装机统计 / 公告 / 云更新。
-     *
-     * 整个流程包在 runCatching 里——服务器连不上时界面照常用，
-     * 这几块显示上一次成功的缓存值。
-     */
-    suspend fun syncServer(reportInstallOnce: Boolean = false) {
-        val snapshot = serverState
-
-        // ① 首次启动上报安装（服务端按 mac 去重，只有首装算新增）
-        if (reportInstallOnce && !snapshot.installReported) {
-            val r = runCatching { KvServerClient.install(context) }.getOrNull()
-            if (r != null) {
-                val st = KvServerClient.parseStats(r.data)
-                withContext(Dispatchers.Main) {
-                    serverState = serverState.copy(
-                        installReported = r.ok,
-                        installCount = if (st.installTotal > 0) st.installTotal else serverState.installCount,
-                        onlineCount = if (st.online > 0) st.online else serverState.onlineCount,
-                        lastError = if (r.ok) "" else r.msg,
-                    )
-                    KvServerStore.save(context, serverState)
-                }
-            }
-        }
-
-        // ② 心跳 + 拉统计
-        val onlineRes = runCatching { KvServerClient.online(context) }.getOrNull()
-        val stats = KvServerClient.parseStats(onlineRes?.data)
-
-        // ③ 公告
-        val noticeRes = runCatching { KvServerClient.notice() }.getOrNull()
-        val (noticeOn, noticeText, noticeVer) = KvServerClient.parseNotice(noticeRes?.data)
-
-        // ④ 云更新
-        val verRes = runCatching { KvServerClient.update() }.getOrNull()
-        val release = KvServerClient.parseRelease(verRes?.data)
-        val serverNeed = KvServerClient.parseNeed(verRes?.data)
-
-        withContext(Dispatchers.Main) {
-            serverState = serverState.copy(
-                onlineCount = stats.online,
-                installCount = if (stats.installTotal > 0) stats.installTotal else serverState.installCount,
-                notice = if (noticeOn) noticeText else "",
-                noticeId = noticeVer,
-                latestVersion = release.verName,
-                latestVersionCode = if (serverNeed) release.verCode else release.verCode,
-                latestUrl = release.url,
-                latestChangelog = release.changelog,
-                latestForce = release.force,
-                lastSyncAt = System.currentTimeMillis(),
-                lastError = when {
-                    onlineRes == null -> "连不上服务器"
-                    !onlineRes.ok -> onlineRes.msg.ifBlank { "同步失败" }
-                    else -> ""
-                },
-            )
-            KvServerStore.save(context, serverState)
-        }
-    }
-
     LaunchedEffect(Unit) {
         busy = true
         refreshStatus()
@@ -181,8 +114,6 @@ fun StarFoxScreen() {
         stealthDetail = runCatching { Stealth.detail() }.getOrDefault(emptyMap())
         recoveryCode = runCatching { StealthController.dialCode(context) }.getOrDefault("")
         busy = false
-        // 服务器同步放到最后，失败不影响上面的本地状态
-        runCatching { syncServer(reportInstallOnce = true) }
     }
 
     Scaffold(
@@ -226,16 +157,6 @@ fun StarFoxScreen() {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp)
-            )
-
-            // 云更新与公告置顶：有更新先看更新，其次看公告
-            UpdateCard(state = serverState)
-            NoticeCard(
-                state = serverState,
-                onDismiss = {
-                    serverState = serverState.copy(noticeDismissedId = serverState.noticeId)
-                    KvServerStore.save(context, serverState)
-                },
             )
 
             // 状态卡：管理器身份 + 底层 + Root 状态
