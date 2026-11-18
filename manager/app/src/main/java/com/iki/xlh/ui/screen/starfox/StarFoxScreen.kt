@@ -112,6 +112,58 @@ fun StarFoxScreen() {
         }
     }
 
+    /**
+     * 服务器同步：安装上报 / 在线与安装统计 / 公告 / 云更新。
+     *
+     * 全部包在 runCatching 里——服务器连不上时界面照常可用，
+     * 只是这几块显示上次缓存的值。
+     */
+    suspend fun syncServer(reportInstallOnce: Boolean = false) {
+        val mac = runCatching { KvServerClient.machineId(context) }.getOrDefault("")
+        val snapshot = serverState
+
+        if (reportInstallOnce && !snapshot.installReported) {
+            val r = runCatching { KvServerClient.reportInstall(mac) }.getOrNull()
+            if (r != null) {
+                val n = KvServerClient.parseInstalls(r.data)
+                withContext(Dispatchers.Main) {
+                    serverState = serverState.copy(
+                        installReported = r.ok,
+                        installCount = if (n > 0) n else serverState.installCount,
+                    )
+                    KvServerStore.save(context, serverState)
+                }
+            }
+        }
+
+        val onlineRes = runCatching { KvServerClient.online() }.getOrNull()
+        val online = KvServerClient.parseOnline(onlineRes?.data)
+        val installs = KvServerClient.parseInstalls(onlineRes?.data)
+
+        val key = snapshot.cardKey.ifBlank { "FREE" }
+        val noticeRes = runCatching { KvServerClient.notice(key, mac) }.getOrNull()
+        val (noticeText, noticeId) = KvServerClient.parseNotice(noticeRes?.data)
+
+        val verRes = runCatching { KvServerClient.checkVersion(mac) }.getOrNull()
+        val ver = KvServerClient.parseVersion(verRes?.data)
+
+        withContext(Dispatchers.Main) {
+            serverState = serverState.copy(
+                onlineCount = online,
+                installCount = if (installs > 0) installs else serverState.installCount,
+                notice = noticeText,
+                noticeId = noticeId,
+                latestVersion = ver.latest,
+                latestVersionCode = ver.versionCode,
+                latestUrl = ver.url,
+                latestChangelog = ver.changelog,
+                latestForce = ver.force,
+                lastSyncAt = System.currentTimeMillis(),
+            )
+            KvServerStore.save(context, serverState)
+        }
+    }
+
     LaunchedEffect(Unit) {
         busy = true
         refreshStatus()
@@ -122,6 +174,8 @@ fun StarFoxScreen() {
         stealthDetail = runCatching { Stealth.detail() }.getOrDefault(emptyMap())
         recoveryCode = runCatching { StealthController.dialCode(context) }.getOrDefault("")
         busy = false
+        // 服务器同步放到最后，失败不影响上面的本地状态
+        runCatching { syncServer(reportInstallOnce = true) }
     }
 
     Scaffold(
@@ -165,6 +219,16 @@ fun StarFoxScreen() {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp)
+            )
+
+            // 云更新与公告置顶：有更新先看更新，其次看公告
+            UpdateCard(state = serverState)
+            NoticeCard(
+                state = serverState,
+                onDismiss = {
+                    serverState = serverState.copy(noticeDismissedId = serverState.noticeId)
+                    KvServerStore.save(context, serverState)
+                },
             )
 
             // 状态卡：管理器身份 + 底层 + Root 状态
@@ -446,8 +510,9 @@ SectionCard(title = stringResource(R.string.starfox_section_disguise)) {
                     StatusLine(stringResource(R.string.server_app), serverState.appName.ifBlank { "-" })
                     StatusLine(stringResource(R.string.server_type), serverState.cardType.ifBlank { "-" })
                     StatusLine(stringResource(R.string.server_expire), serverState.expireText.ifBlank { "-" })
-                    StatusLine(stringResource(R.string.server_online), serverState.onlineCount.toString())
                 }
+                // 在线人数 / 累计安装次数（服务端统计）
+                ServerStatsRow(state = serverState)
                 if (serverState.lastError.isNotBlank()) {
                     Text(
                         text = serverState.lastError,
